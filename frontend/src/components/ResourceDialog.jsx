@@ -1,0 +1,355 @@
+import { useState, useEffect, useMemo } from 'react';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Button from '@mui/material/Button';
+import TextField from '@mui/material/TextField';
+import MenuItem from '@mui/material/MenuItem';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Switch from '@mui/material/Switch';
+import Typography from '@mui/material/Typography';
+import Box from '@mui/material/Box';
+import Accordion from '@mui/material/Accordion';
+import AccordionSummary from '@mui/material/AccordionSummary';
+import AccordionDetails from '@mui/material/AccordionDetails';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import Chip from '@mui/material/Chip';
+import IconButton from '@mui/material/IconButton';
+import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
+import InputAdornment from '@mui/material/InputAdornment';
+import SearchIcon from '@mui/icons-material/Search';
+import Autocomplete from '@mui/material/Autocomplete';
+import { buildFormSections, getAllResourceNamesForRef } from '../utils/formBuilder';
+
+function FieldRenderer({ field, value, onChange, tree, currentOrg }) {
+  const handleChange = (val) => onChange(field.name, val);
+
+  if (field.type === 'boolean') {
+    return (
+      <FormControlLabel
+        control={<Switch checked={!!value} onChange={(e) => handleChange(e.target.checked)} />}
+        label={field.label}
+        sx={{ my: 0.5 }}
+      />
+    );
+  }
+
+  if (field.is_reference && tree) {
+    const refType = field.ref_resource_type || field.name.replace(/_(?:policy|policies|pool|pools|template)$/, '');
+    const options = getAllResourceNamesForRef(tree, refType);
+    const isMulti = field.type === 'array';
+
+    if (options.length > 0) {
+      return (
+        <Autocomplete
+          freeSolo
+          multiple={isMulti}
+          options={options.map((o) => o.label)}
+          value={value ?? (isMulti ? [] : '')}
+          onChange={(_, newVal) => handleChange(newVal)}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label={field.label}
+              helperText={field.description || 'Type or select a resource name'}
+              margin="dense"
+              required={field.required}
+            />
+          )}
+          sx={{ my: 0.5 }}
+        />
+      );
+    }
+
+    return (
+      <TextField
+        fullWidth label={field.label} value={value ?? field.default ?? ''}
+        onChange={(e) => handleChange(e.target.value)}
+        helperText={field.description || 'Reference by name. Use org/name for cross-org refs.'}
+        margin="dense" required={field.required}
+      />
+    );
+  }
+
+  if (field.type === 'select') {
+    return (
+      <TextField
+        select fullWidth label={field.label} value={value ?? field.default ?? ''}
+        onChange={(e) => handleChange(e.target.value)}
+        helperText={field.description} margin="dense" required={field.required}
+      >
+        {(field.options || []).map((opt) => (
+          <MenuItem key={opt} value={opt}>{opt}</MenuItem>
+        ))}
+      </TextField>
+    );
+  }
+
+  if (field.type === 'integer' || field.type === 'number') {
+    return (
+      <TextField
+        fullWidth type="number" label={field.label}
+        value={value ?? field.default ?? ''}
+        onChange={(e) => handleChange(field.type === 'integer' ? parseInt(e.target.value) : parseFloat(e.target.value))}
+        helperText={field.description} margin="dense" required={field.required}
+        inputProps={{ min: field.minimum, max: field.maximum }}
+      />
+    );
+  }
+
+  if (field.type === 'array' && field.item_fields) {
+    const items = Array.isArray(value) ? value : [];
+    return (
+      <Box sx={{ my: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+          <Typography variant="body2" sx={{ fontWeight: 600, flex: 1 }}>{field.label}</Typography>
+          <IconButton size="small" onClick={() => handleChange([...items, {}])} color="secondary">
+            <AddIcon fontSize="small" />
+          </IconButton>
+        </Box>
+        {items.map((item, idx) => (
+          <Box key={idx} sx={{ pl: 2, borderLeft: '2px solid', borderColor: 'divider', mb: 1 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant="caption" color="text.secondary">#{idx + 1}</Typography>
+              <IconButton size="small" onClick={() => handleChange(items.filter((_, i) => i !== idx))} color="error">
+                <DeleteIcon sx={{ fontSize: 14 }} />
+              </IconButton>
+            </Box>
+            {field.item_fields.map((subField) => (
+              <FieldRenderer
+                key={subField.name} field={subField} value={item[subField.name]}
+                onChange={(name, val) => {
+                  const updated = [...items];
+                  updated[idx] = { ...updated[idx], [name]: val };
+                  handleChange(updated);
+                }}
+                tree={tree} currentOrg={currentOrg}
+              />
+            ))}
+          </Box>
+        ))}
+      </Box>
+    );
+  }
+
+  if (field.type === 'array') {
+    const items = Array.isArray(value) ? value : [];
+    return (
+      <Box sx={{ my: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+          <Typography variant="body2" sx={{ fontWeight: 600, flex: 1 }}>{field.label}</Typography>
+          <IconButton size="small" onClick={() => handleChange([...items, ''])} color="secondary">
+            <AddIcon fontSize="small" />
+          </IconButton>
+        </Box>
+        {items.map((item, idx) => (
+          <Box key={idx} sx={{ display: 'flex', gap: 1, mb: 0.5 }}>
+            {field.item_type === 'select' ? (
+              <TextField
+                select fullWidth size="small" value={item}
+                onChange={(e) => {
+                  const updated = [...items];
+                  updated[idx] = e.target.value;
+                  handleChange(updated);
+                }}
+              >
+                {(field.options || []).map((opt) => (
+                  <MenuItem key={opt} value={opt}>{opt}</MenuItem>
+                ))}
+              </TextField>
+            ) : (
+              <TextField
+                fullWidth size="small" value={item}
+                onChange={(e) => {
+                  const updated = [...items];
+                  updated[idx] = e.target.value;
+                  handleChange(updated);
+                }}
+              />
+            )}
+            <IconButton size="small" onClick={() => handleChange(items.filter((_, i) => i !== idx))} color="error">
+              <DeleteIcon sx={{ fontSize: 14 }} />
+            </IconButton>
+          </Box>
+        ))}
+        {field.description && <Typography variant="caption" color="text.secondary">{field.description}</Typography>}
+      </Box>
+    );
+  }
+
+  if (field.type === 'object' && field.fields) {
+    const obj = typeof value === 'object' && value ? value : {};
+    return (
+      <Accordion disableGutters sx={{ my: 0.5 }}>
+        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>{field.label}</Typography>
+        </AccordionSummary>
+        <AccordionDetails>
+          {field.fields.map((subField) => (
+            <FieldRenderer
+              key={subField.name} field={subField} value={obj[subField.name]}
+              onChange={(name, val) => handleChange({ ...obj, [name]: val })}
+              tree={tree} currentOrg={currentOrg}
+            />
+          ))}
+        </AccordionDetails>
+      </Accordion>
+    );
+  }
+
+  return (
+    <TextField
+      fullWidth label={field.label} value={value ?? field.default ?? ''}
+      onChange={(e) => handleChange(e.target.value)}
+      helperText={field.description} margin="dense" required={field.required}
+    />
+  );
+}
+
+
+function BiosSectionGroup({ section, formData, onFieldChange, search, tree, currentOrg }) {
+  const filtered = search
+    ? section.fields.filter((f) =>
+        f.name.toLowerCase().includes(search.toLowerCase()) ||
+        f.label.toLowerCase().includes(search.toLowerCase())
+      )
+    : section.fields;
+
+  if (filtered.length === 0) return null;
+
+  const modifiedCount = section.fields.filter(
+    (f) => formData[f.name] !== undefined && formData[f.name] !== 'platform-default'
+  ).length;
+
+  return (
+    <Accordion disableGutters TransitionProps={{ unmountOnExit: true }}>
+      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+        <Typography variant="body2" sx={{ fontWeight: 600, flex: 1 }}>
+          {section.title} ({filtered.length})
+        </Typography>
+        {modifiedCount > 0 && (
+          <Chip label={`${modifiedCount} set`} size="small" color="secondary" sx={{ mr: 1 }} />
+        )}
+      </AccordionSummary>
+      <AccordionDetails sx={{ maxHeight: 400, overflow: 'auto' }}>
+        {filtered.map((field) => (
+          <FieldRenderer
+            key={field.name} field={field} value={formData[field.name]}
+            onChange={onFieldChange} tree={tree} currentOrg={currentOrg}
+          />
+        ))}
+      </AccordionDetails>
+    </Accordion>
+  );
+}
+
+
+export default function ResourceDialog({ open, onClose, onSave, schema, initialData, org, category, resourceType, tree }) {
+  const [formData, setFormData] = useState({});
+  const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    setFormData(initialData || {});
+    setSearch('');
+  }, [initialData, open]);
+
+  const formStructure = useMemo(
+    () => buildFormSections(schema, resourceType),
+    [schema, resourceType]
+  );
+
+  if (!schema) return null;
+
+  const handleFieldChange = (name, value) => {
+    setFormData((prev) => {
+      const updated = { ...prev };
+      if (value === '' || value === undefined || value === null) {
+        delete updated[name];
+      } else {
+        updated[name] = value;
+      }
+      return updated;
+    });
+  };
+
+  const handleSave = () => {
+    onSave(formData);
+    onClose();
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth scroll="paper">
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box sx={{ flex: 1 }}>
+          {initialData ? 'Edit' : 'Create'} {schema.friendly_name}
+          <Typography variant="caption" display="block" color="text.secondary">
+            Organization: {org} | Category: {category}
+          </Typography>
+        </Box>
+        {initialData?.name && <Chip label={initialData.name} size="small" color="primary" />}
+      </DialogTitle>
+
+      <DialogContent dividers>
+        {formStructure.core.map((field) => (
+          <FieldRenderer
+            key={field.name} field={field} value={formData[field.name]}
+            onChange={handleFieldChange} tree={tree} currentOrg={org}
+          />
+        ))}
+
+        {formStructure.isBios && formStructure.sections.length > 0 && (
+          <Box sx={{ mt: 2 }}>
+            <TextField
+              fullWidth placeholder="Search BIOS tokens..." size="small"
+              value={search} onChange={(e) => setSearch(e.target.value)}
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon fontSize="small" />
+                    </InputAdornment>
+                  ),
+                },
+              }}
+              sx={{ mb: 1 }}
+            />
+            {formStructure.sections.map((section) => (
+              <BiosSectionGroup
+                key={section.title} section={section}
+                formData={formData} onFieldChange={handleFieldChange}
+                search={search} tree={tree} currentOrg={org}
+              />
+            ))}
+          </Box>
+        )}
+
+        {!formStructure.isBios && formStructure.sections.map((section) => (
+          <Accordion key={section.title} disableGutters sx={{ mt: 1 }} TransitionProps={{ unmountOnExit: true }}>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                {section.title} ({section.fields.length})
+              </Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              {section.fields.map((field) => (
+                <FieldRenderer
+                  key={field.name} field={field} value={formData[field.name]}
+                  onChange={handleFieldChange} tree={tree} currentOrg={org}
+                />
+              ))}
+            </AccordionDetails>
+          </Accordion>
+        ))}
+      </DialogContent>
+
+      <DialogActions>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="contained" onClick={handleSave} disabled={!formData.name}>
+          {initialData ? 'Save' : 'Create'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}

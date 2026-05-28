@@ -1,0 +1,71 @@
+const BASE = '';
+
+async function request(path, options = {}) {
+  const res = await fetch(`${BASE}${path}`, {
+    headers: { 'Content-Type': 'application/json' },
+    ...options,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || res.statusText);
+  }
+  return res.json();
+}
+
+export const api = {
+  getTypes: () => request('/api/schema/types'),
+  getSchema: (category, type) => request(`/api/schema/${category}/${type}`),
+
+  getTree: () => request('/api/tree'),
+  getOrgs: () => request('/api/orgs'),
+  createOrg: (name) => request('/api/orgs', { method: 'POST', body: JSON.stringify({ name }) }),
+  deleteOrg: (name) => request(`/api/orgs/${name}`, { method: 'DELETE' }),
+
+  getOrgResources: (org) => request(`/api/resources/${org}`),
+  getResources: (org, category, type) => request(`/api/resources/${org}/${category}/${type}`),
+  saveResource: (org, category, type, data) =>
+    request(`/api/resources/${org}/${category}/${type}`, {
+      method: 'POST',
+      body: JSON.stringify({ data }),
+    }),
+  deleteResource: (org, category, type, name) =>
+    request(`/api/resources/${org}/${category}/${type}/${name}`, { method: 'DELETE' }),
+  cloneResource: (payload) =>
+    request('/api/resources/clone', { method: 'POST', body: JSON.stringify(payload) }),
+
+  getSettings: () => request('/api/settings'),
+  saveSettings: (settings) =>
+    request('/api/settings', { method: 'PUT', body: JSON.stringify(settings) }),
+  testConnection: () => request('/api/settings/test', { method: 'POST' }),
+
+  runTerraform: (action) => request(`/api/terraform/${action}`, { method: 'POST' }),
+
+  importTestConnection: () => request('/api/import/test', { method: 'POST' }),
+  importListOrgs: () => request('/api/import/orgs'),
+  importListResources: (orgFilter, categories) =>
+    request('/api/import/resources', {
+      method: 'POST',
+      body: JSON.stringify({ org_filter: orgFilter || null, categories: categories || null }),
+    }),
+  importListByType: (category, type, org) =>
+    request(`/api/import/resources/${category}/${type}${org ? `?org=${org}` : ''}`),
+
+  previewTechShared: () => request('/api/export/preview/tech-shared'),
+  previewTechUcs: () => request('/api/export/preview/tech-ucs'),
+  downloadTechShared: () => window.open('/api/export/tech-shared', '_blank'),
+  downloadTechUcs: () => window.open('/api/export/tech-ucs', '_blank'),
+
+  getRedfishSchemas: () => request('/api/redfish/schemas'),
+  getRedfishServer: () => request('/api/redfish/server'),
+  saveRedfishServer: (data) =>
+    request('/api/redfish/server', { method: 'PUT', body: JSON.stringify(data) }),
+  getRedfishConfigs: () => request('/api/redfish/config'),
+  getRedfishConfig: (key) => request(`/api/redfish/config/${key}`),
+  saveRedfishConfig: (key, data) =>
+    request(`/api/redfish/config/${key}`, {
+      method: 'PUT',
+      body: JSON.stringify({ resource_key: key, data }),
+    }),
+  generateRedfishTf: () => request('/api/redfish/generate', { method: 'POST' }),
+  runRedfishTerraform: (action) => request(`/api/redfish/terraform/${action}`, { method: 'POST' }),
+};
