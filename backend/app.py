@@ -342,6 +342,7 @@ def import_list_resources_by_type(category: str, resource_type: str, org: str = 
 # ── Redfish configuration endpoints ──
 
 import redfish_manager
+import redfish_direct
 import docascode_exporter
 
 @app.get("/api/redfish/schemas")
@@ -381,6 +382,18 @@ def get_redfish_config(resource_key: str):
 def save_redfish_config(resource_key: str, payload: RedfishResourcePayload):
     redfish_manager.save_resource_config(resource_key, payload.data)
     return {"ok": True}
+
+
+@app.post("/api/redfish/direct-push")
+def direct_push_all():
+    """Push all enabled resource configs directly to the BMC via Redfish API."""
+    return redfish_direct.push_all_enabled()
+
+
+@app.post("/api/redfish/direct-push/{resource_key}")
+def direct_push_single(resource_key: str):
+    """Push a single resource config directly to the BMC via Redfish API."""
+    return redfish_direct.push_single(resource_key)
 
 
 @app.post("/api/redfish/generate")

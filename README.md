@@ -10,7 +10,7 @@ EasyIMM UCS Toolkit is a browser-based application that provides a visual interf
 
 - **Easy IMM** -- The community [Easy IMM](https://github.com/terraform-cisco-modules/easy-imm) Terraform module framework for Cisco Intersight Managed Mode. Manage organizations, pools, policies, profiles, and templates through interactive forms instead of editing YAML files manually.
 
-- **Redfish / ai-pods** -- Terraform-based configuration for bare-metal servers managed via the Redfish API (e.g., Cisco C885A AI infrastructure nodes). Configure BIOS, boot order, power state, BMC settings, and more through a guided UI.
+- **Redfish** -- Direct and Terraform-based configuration for bare-metal servers managed via the Redfish API (e.g., Cisco C885A AI infrastructure nodes). Configure BIOS, boot order, power state, BMC settings, and more through a guided UI. Push changes directly to the BMC or use Terraform for state-managed IaC deployments.
 
 Both tabs include integrated Terraform runners that let you validate, plan, apply, and destroy infrastructure directly from the browser.
 
@@ -44,7 +44,7 @@ This toolkit solves all of these:
 │                   Browser (React + MUI)              │
 │  ┌──────────────┐  ┌──────────────┐  ┌───────────┐  │
 │  │  Easy IMM    │  │  Redfish /   │  │  Export /  │  │
-│  │  Config Tab  │  │  ai-pods Tab │  │  Import    │  │
+│  │  Config Tab  │  │  Redfish Tab │  │  Import    │  │
 │  └──────┬───────┘  └──────┬───────┘  └─────┬─────┘  │
 └─────────┼─────────────────┼────────────────┼────────┘
           │  REST + WebSocket               │
@@ -79,7 +79,9 @@ This toolkit solves all of these:
 
 1. **Easy IMM tab**: The UI reads the Easy IMM JSON schema (`easy-imm.json`) to dynamically generate forms. When you edit and save a resource, the backend writes `.ezi.yaml` files to the Easy IMM Terraform root. Clicking Plan/Apply runs `terraform plan/apply` in that root directory.
 
-2. **Redfish tab**: The UI presents configuration forms for Redfish resource types (BIOS, boot order, power, etc.). When you click "Generate TF", the backend creates Terraform files (`provider.tf`, `variables.tf`, `main.tf`, `terraform.tfvars`) in the Redfish workspace. Then Init/Plan/Apply deploys via the `ciscodevnet/redfish` Terraform provider.
+2. **Redfish tab**: The UI presents configuration forms for Redfish resource types (BIOS with 50+ C885A-specific tokens, boot order, power, etc.). Two deployment modes are available:
+   - **Direct Push**: Sends REST API calls (PATCH/POST) directly to the BMC Redfish endpoints -- instant, no Terraform required.
+   - **Terraform IaC**: Clicks "Generate TF" to create Terraform files (`provider.tf`, `variables.tf`, `main.tf`, `terraform.tfvars`) in the Redfish workspace. Then Init/Plan/Apply deploys via the `ciscodevnet/redfish` Terraform provider with full state management.
 
 3. **Import**: Connects to Cisco Intersight via the official Python SDK to fetch existing organizations, pools, policies, and profiles.
 
@@ -109,14 +111,14 @@ cd EasyIMM-UCS-Toolkit
 ./run.sh
 
 # 3. Open your browser
-#    → http://localhost:8100
+#    → http://localhost:8200
 ```
 
 That's it. The `run.sh` script automatically:
 - Detects and validates your Python installation
 - Creates a virtual environment and installs dependencies
 - Builds the frontend if not already built
-- Starts the server on port 8100
+- Starts the server on port 8200
 
 ### Configuration
 
@@ -127,7 +129,7 @@ That's it. The `run.sh` script automatically:
 4. Click Save
 
 **Redfish BMC connection** (for Redfish tab):
-1. Switch to the "Redfish / ai-pods" tab
+1. Switch to the "Redfish" tab
 2. Enter the BMC endpoint URL (e.g., `https://10.0.0.1`)
 3. Enter username and password
 4. Click Save Connection
@@ -135,8 +137,8 @@ That's it. The `run.sh` script automatically:
 ### Commands
 
 ```bash
-./run.sh              # Start in production mode (single port: 8100)
-./run.sh dev          # Start in development mode (hot-reload, ports 3100 + 8100)
+./run.sh              # Start in production mode (single port: 8200)
+./run.sh dev          # Start in development mode (hot-reload, ports 3100 + 8200)
 ./run.sh build        # Build frontend without starting
 ./run.sh stop         # Stop background dev processes
 PORT=9000 ./run.sh    # Start on a custom port
@@ -155,6 +157,7 @@ PORT=9000 ./run.sh    # Start on a custom port
 | `yaml_manager.py` | CRUD operations on `.ezi.yaml` files organized by organization |
 | `terraform_runner.py` | Async subprocess runner for Terraform commands with streaming output |
 | `redfish_manager.py` | Redfish resource schemas, config storage, TF file generation |
+| `redfish_direct.py` | Direct Redfish API push (PATCH/POST to BMC without Terraform) |
 | `intersight_client.py` | Intersight Python SDK wrapper for importing existing configs |
 | `docascode_exporter.py` | Maps configs to CiscoIQ Document-as-Code YAML schema |
 
@@ -225,9 +228,12 @@ EasyIMM-UCS-Toolkit/
 
 ### Redfish Tab
 - BMC connection management (endpoint, credentials, TLS)
-- 11 configurable resource types: BIOS, Boot Order, Power, BMC Settings, BMC Network Protocol, Virtual Media, Secure Boot, Identify LED, BIOS Reset, Event Subscriptions, Log Service
+- 11 configurable resource types: BIOS (50+ C885A tokens), Boot Order, Power, BMC Settings, BMC Network Protocol, Virtual Media, Secure Boot, Identify LED, BIOS Reset, Event Subscriptions, Log Service
+- BIOS configuration grouped by category: I/O, Server Management, Security, Memory, Processor, Power/Performance
 - Enable/disable individual resources
-- Auto-generate Terraform files from UI configuration
+- **Two deployment methods:**
+  - **Direct Push** -- PATCH/POST directly to BMC Redfish API (no Terraform needed, instant apply)
+  - **Terraform IaC** -- Generate `.tf` files, plan, and apply with state management
 - Independent Terraform runner for Redfish workspace
 
 ### Export
@@ -243,7 +249,7 @@ EasyIMM-UCS-Toolkit/
 |-------|----------|
 | `python3: command not found` | Install Python 3.10+ from [python.org](https://www.python.org/downloads/) |
 | `terraform: command not found` | Install Terraform from [terraform.io](https://developer.hashicorp.com/terraform/install). Only needed for plan/apply. |
-| Port 8100 already in use | Run with a different port: `PORT=9000 ./run.sh` |
+| Port 8200 already in use | Run with a different port: `PORT=9000 ./run.sh` |
 | Intersight auth fails | Verify your API Key ID and SecretKey.txt path in Settings |
 | Frontend not loading | Run `./run.sh build` to rebuild the frontend |
 

@@ -63,7 +63,7 @@ export default function App() {
       setTree(treeData);
       setTypes(typesData);
     } catch {
-      setToast({ severity: 'error', text: 'Failed to load data. Is the backend running on port 8100?' });
+      setToast({ severity: 'error', text: 'Failed to load data. Is the backend running on port 8200?' });
     }
   }, []);
 
@@ -178,7 +178,7 @@ export default function App() {
               TabIndicatorProps={{ sx: { bgcolor: 'primary.main' } }}
             >
               <Tab icon={<DeviceHubIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Easy IMM" />
-              <Tab icon={<MemoryIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Redfish / ai-pods" />
+              <Tab icon={<MemoryIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Redfish" />
             </Tabs>
 
             {mainTab === 0 && (

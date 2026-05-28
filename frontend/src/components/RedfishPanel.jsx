@@ -34,10 +34,15 @@ import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import AlbumIcon from '@mui/icons-material/Album';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import NetworkCheckIcon from '@mui/icons-material/NetworkCheck';
+import Collapse from '@mui/material/Collapse';
 import ClearIcon from '@mui/icons-material/Clear';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import LinkIcon from '@mui/icons-material/Link';
+import TuneIcon from '@mui/icons-material/Tune';
+import SendIcon from '@mui/icons-material/Send';
+import Tab from '@mui/material/Tab';
+import Tabs from '@mui/material/Tabs';
 import { api } from '../api';
 
 const RESOURCE_ICONS = {
@@ -299,6 +304,60 @@ function ServerConnection({ server, onSave }) {
 }
 
 
+const BIOS_SECTIONS = [
+  { id: 'general', label: 'General', fields: ['system_id', 'reboot_on_changes'] },
+  { id: 'io', label: 'I/O Parameters', fields: ['pcie_link_speed', 'pcie_ten_bit_tag', 'pcie_ari_support', 'sriov_support', 'ipv4_pxe', 'ipv6_pxe', 'ipv4_http', 'ipv6_http'] },
+  { id: 'mgmt', label: 'Server Management', fields: ['frb2_timer', 'console_redirection', 'terminal_type', 'os_watchdog_timer', 'os_wtd_timer_timeout', 'os_wtd_timer_policy', 'baud_rate', 'flow_control'] },
+  { id: 'security', label: 'Security', fields: ['tpm_state', 'tpm_pending_operation', 'security_device_support', 'sha256_pcr_bank', 'sha384_pcr_bank', 'password_protection_runtime'] },
+  { id: 'memory', label: 'Memory', fields: ['iommu', 'numa_nodes_per_socket', 'tsme', 'smee', 'sev_snp_support', 'chipselect_interleaving', 'dram_refresh_rate', 'ddr_healing_bist', 'l1_burst_prefetch', 'bme_dma_mitigation', 'dram_scrub_time', 'dram_boot_ppr', 'dram_runtime_ppr', 'bank_swap_mode', 'memory_interleaving', 'above_4g_decoding', 'snp_memory_coverage'] },
+  { id: 'processor', label: 'Processor', fields: ['svm_mode', 'smt_control', 'avx512', 'global_cstate_control', 'df_pstate_freq_optimizer', 'xgmi_force_link_width', 'xgmi_max_speed', 'downcore_mode', 'ccd_control', 'local_apic_mode', 'streaming_stores', 'acpi_srat_l3_numa', 'apbdis'] },
+  { id: 'power', label: 'Power / Performance', fields: ['power_profile', 'core_perf_boost', 'cppc', 'determinism_enable', 'l1_stream_hw_prefetcher', 'l2_stream_hw_prefetcher', 'power_down_enable'] },
+  { id: 'custom', label: 'Additional Overrides', fields: ['bios_attributes'] },
+];
+
+function SectionGroup({ label, fields, data, allFields, onChange, defaultOpen }) {
+  const [open, setOpen] = useState(defaultOpen ?? false);
+  const sectionFields = allFields.filter((f) => fields.includes(f.name));
+  if (sectionFields.length === 0) return null;
+
+  const modifiedCount = sectionFields.filter((f) => {
+    const val = data[f.name];
+    const def = f.default;
+    if (val === undefined || val === null) return false;
+    return String(val) !== String(def ?? '');
+  }).length;
+
+  return (
+    <Box sx={{ mb: 0.5 }}>
+      <Box
+        onClick={() => setOpen(!open)}
+        sx={{
+          display: 'flex', alignItems: 'center', gap: 1,
+          px: 1.5, py: 0.8, cursor: 'pointer', borderRadius: 1,
+          bgcolor: open ? 'rgba(0,188,235,0.06)' : 'transparent',
+          '&:hover': { bgcolor: 'rgba(0,188,235,0.08)' },
+          transition: 'background 0.15s',
+        }}
+      >
+        {open ? <ExpandMoreIcon sx={{ fontSize: 18 }} /> : <ExpandLessIcon sx={{ fontSize: 18, transform: 'rotate(90deg)' }} />}
+        <TuneIcon sx={{ fontSize: 16, color: 'primary.main', opacity: 0.7 }} />
+        <Typography variant="subtitle2" sx={{ fontWeight: 600, flex: 1 }}>{label}</Typography>
+        <Chip label={`${sectionFields.length}`} size="small" variant="outlined" sx={{ height: 20, fontSize: 11 }} />
+        {modifiedCount > 0 && (
+          <Chip label={`${modifiedCount} changed`} size="small" color="warning" sx={{ height: 20, fontSize: 11 }} />
+        )}
+      </Box>
+      <Collapse in={open}>
+        <Box sx={{ pl: 2, pr: 1, py: 1 }}>
+          {sectionFields.map((field) => (
+            <FieldInput key={field.name} field={field} value={data[field.name]} onChange={onChange} />
+          ))}
+        </Box>
+      </Collapse>
+    </Box>
+  );
+}
+
 function ResourceForm({ resourceKey, schema, onSaveToast }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -336,6 +395,7 @@ function ResourceForm({ resourceKey, schema, onSaveToast }) {
   }
 
   const enabled = !!data._enabled;
+  const isBios = resourceKey === 'bios';
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -383,15 +443,132 @@ function ResourceForm({ resourceKey, schema, onSaveToast }) {
           Terraform resource: <code style={{ color: '#00bceb' }}>{schema.resource_type}</code>
         </Typography>
         <Divider sx={{ mb: 1.5 }} />
-        {schema.fields.map((field) => (
-          <FieldInput
-            key={field.name}
-            field={field}
-            value={data[field.name]}
-            onChange={handleFieldChange}
-          />
-        ))}
+
+        {isBios ? (
+          BIOS_SECTIONS.map((section) => (
+            <SectionGroup
+              key={section.id}
+              label={section.label}
+              fields={section.fields}
+              data={data}
+              allFields={schema.fields}
+              onChange={handleFieldChange}
+              defaultOpen={section.id === 'general'}
+            />
+          ))
+        ) : (
+          schema.fields.map((field) => (
+            <FieldInput
+              key={field.name}
+              field={field}
+              value={data[field.name]}
+              onChange={handleFieldChange}
+            />
+          ))
+        )}
       </Box>
+    </Box>
+  );
+}
+
+
+function DirectPushPanel() {
+  const [output, setOutput] = useState([]);
+  const [pushing, setPushing] = useState(false);
+  const [lastStatus, setLastStatus] = useState(null);
+  const [expanded, setExpanded] = useState(true);
+  const logRef = useRef(null);
+
+  useEffect(() => {
+    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
+  }, [output]);
+
+  const handlePushAll = async () => {
+    setPushing(true);
+    setOutput([]);
+    setLastStatus(null);
+    setExpanded(true);
+    try {
+      const result = await api.directPushAll();
+      const results = result.results || [];
+      if (results.length === 0) {
+        setOutput([result.message || result.error || 'No resources enabled.\n']);
+        setLastStatus(result.ok ? 'success' : 'error');
+      } else {
+        const lines = ['Direct Redfish API push results:\n', '\n'];
+        for (const r of results) {
+          const icon = r.ok ? (r.skipped ? '⊘' : '✓') : '✗';
+          const color = r.ok ? '' : ' [FAILED]';
+          lines.push(`  ${icon} ${r.label}${color}\n`);
+          if (r.detail && !r.ok) lines.push(`     → ${r.detail}\n`);
+          if (r.skipped) lines.push(`     → Skipped (no changes)\n`);
+        }
+        const ok = results.filter((r) => r.ok && !r.skipped).length;
+        const fail = results.filter((r) => !r.ok).length;
+        const skip = results.filter((r) => r.skipped).length;
+        lines.push(`\nSummary: ${ok} applied, ${skip} skipped, ${fail} failed\n`);
+        if (fail === 0 && ok > 0) lines.push('Some changes may require a host reboot to take effect.\n');
+        setOutput(lines);
+        setLastStatus(result.ok ? 'success' : 'error');
+      }
+    } catch (e) {
+      setOutput([`Error: ${e.message}\n`]);
+      setLastStatus('error');
+    }
+    setPushing(false);
+  };
+
+  return (
+    <Box sx={{ borderTop: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', px: 2, py: 0.5, gap: 1, flexWrap: 'wrap' }}>
+        <Typography variant="subtitle2" sx={{ fontWeight: 700, mr: 1 }}>Direct Redfish Push</Typography>
+        <Button
+          size="small" variant="contained" color="warning"
+          startIcon={<SendIcon />}
+          onClick={handlePushAll} disabled={pushing}
+        >
+          {pushing ? 'Pushing...' : 'Push All Enabled'}
+        </Button>
+        <Box sx={{ flex: 1 }} />
+        {pushing && <Chip label="Pushing..." size="small" color="warning" />}
+        {lastStatus === 'success' && <Chip label="Success" size="small" color="success" />}
+        {lastStatus === 'error' && <Chip label="Failed" size="small" color="error" />}
+        <Tooltip title="Clear">
+          <IconButton size="small" onClick={() => { setOutput([]); setLastStatus(null); }}>
+            <ClearIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+        <IconButton size="small" onClick={() => setExpanded(!expanded)}>
+          {expanded ? <ExpandMoreIcon fontSize="small" /> : <ExpandLessIcon fontSize="small" />}
+        </IconButton>
+      </Box>
+      {expanded && (
+        <Box ref={logRef} sx={{
+          height: 220, overflow: 'auto', px: 2, py: 1,
+          fontFamily: '"JetBrains Mono", "Fira Code", monospace',
+          fontSize: 12, lineHeight: 1.6, bgcolor: '#0d1117',
+        }}>
+          {output.length === 0 && (
+            <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+              Push enabled configurations directly to the BMC via Redfish API (no Terraform needed).
+              <br />Configure and enable resources above, then click &quot;Push All Enabled&quot;.
+              <br /><br />
+              <strong>Direct Push</strong> sends PATCH/POST requests to the BMC Redfish endpoints immediately.
+              <br /><strong>Terraform</strong> (other tab) generates .tf files and uses the Terraform lifecycle for state management.
+            </Typography>
+          )}
+          {output.map((line, i) => {
+            let color = 'text.primary';
+            if (line.includes('✓')) color = 'success.main';
+            else if (line.includes('✗') || line.includes('FAILED') || line.includes('Error')) color = 'error.main';
+            else if (line.includes('⊘') || line.includes('Skipped')) color = 'text.secondary';
+            else if (line.includes('Summary:')) color = 'info.main';
+            return (
+              <Box key={i} component="span" sx={{ color, display: 'block', whiteSpace: 'pre-wrap' }}>{line}</Box>
+            );
+          })}
+        </Box>
+      )}
     </Box>
   );
 }
@@ -542,6 +719,26 @@ function RedfishTerraformPanel() {
 }
 
 
+function RedfishDeployPanel() {
+  const [mode, setMode] = useState(0);
+  return (
+    <Box>
+      <Box sx={{ borderTop: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
+        <Tabs
+          value={mode} onChange={(_, v) => setMode(v)}
+          sx={{ minHeight: 32, '& .MuiTab-root': { minHeight: 32, py: 0.5, fontSize: 12, textTransform: 'none' } }}
+        >
+          <Tab label="Direct Push (Redfish API)" />
+          <Tab label="Terraform (IaC)" />
+        </Tabs>
+      </Box>
+      {mode === 0 && <DirectPushPanel />}
+      {mode === 1 && <RedfishTerraformPanel />}
+    </Box>
+  );
+}
+
+
 export default function RedfishPanel() {
   const [schemas, setSchemas] = useState(null);
   const [server, setServer] = useState(null);
@@ -685,8 +882,8 @@ export default function RedfishPanel() {
         </Box>
       </Box>
 
-      {/* Terraform panel */}
-      <RedfishTerraformPanel />
+      {/* Deploy panels: Direct Push vs Terraform */}
+      <RedfishDeployPanel />
 
       {/* Toast */}
       <Snackbar open={!!toast} autoHideDuration={4000} onClose={() => setToast(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>

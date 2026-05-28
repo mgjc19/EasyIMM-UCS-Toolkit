@@ -6,7 +6,7 @@ BACKEND_DIR="$SCRIPT_DIR/backend"
 FRONTEND_DIR="$SCRIPT_DIR/frontend"
 STATIC_DIR="$BACKEND_DIR/static"
 PID_DIR="$SCRIPT_DIR/.pids"
-PORT="${PORT:-8100}"
+PORT="${PORT:-8200}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -148,9 +148,9 @@ dev_mode() {
 
   cd "$BACKEND_DIR"
   source venv/bin/activate
-  uvicorn app:app --host 0.0.0.0 --port 8100 --reload &
+  uvicorn app:app --host 0.0.0.0 --port 8200 --reload &
   echo $! > "$PID_DIR/backend.pid"
-  echo -e "  ${GREEN}✓${NC} Backend on http://localhost:8100"
+  echo -e "  ${GREEN}✓${NC} Backend on http://localhost:8200"
 
   cd "$FRONTEND_DIR"
   if [ ! -d "node_modules" ]; then
