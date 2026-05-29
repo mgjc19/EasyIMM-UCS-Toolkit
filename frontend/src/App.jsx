@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import Box from '@mui/material/Box';
@@ -10,6 +10,15 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import SyncIcon from '@mui/icons-material/Sync';
+import SyncDisabledIcon from '@mui/icons-material/SyncDisabled';
+import CircularProgress from '@mui/material/CircularProgress';
+import Chip from '@mui/material/Chip';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
+import ListItemIcon from '@mui/material/ListItemIcon';
+import ListItemText from '@mui/material/ListItemText';
+import FolderIcon from '@mui/icons-material/Folder';
 import Tooltip from '@mui/material/Tooltip';
 import Snackbar from '@mui/material/Snackbar';
 import Alert from '@mui/material/Alert';
@@ -63,11 +72,75 @@ export default function App() {
       setTree(treeData);
       setTypes(typesData);
     } catch {
-      setToast({ severity: 'error', text: 'Failed to load data. Is the backend running on port 8200?' });
+      setToast({ severity: 'error', text: 'Failed to load data. Is the backend running?' });
     }
   }, []);
 
   useEffect(() => { loadTree(); }, [loadTree]);
+
+  const [syncStatus, setSyncStatus] = useState('idle');
+  const [syncProgress, setSyncProgress] = useState(null);
+  const [syncLastTime, setSyncLastTime] = useState(null);
+  const syncPollRef = useRef(null);
+
+  const handleSync = useCallback(async () => {
+    try {
+      await api.triggerSync();
+      setSyncStatus('running');
+      setToast({ severity: 'info', text: 'Sync from Intersight started...' });
+      syncPollRef.current = setTimeout(async function poll() {
+        try {
+          const s = await api.getSyncStatus();
+          setSyncStatus(s.status);
+          setSyncProgress(s.progress);
+          if (s.last_synced) setSyncLastTime(new Date(s.last_synced * 1000));
+          if (s.status === 'running') {
+            syncPollRef.current = setTimeout(poll, 1500);
+          } else {
+            loadTree();
+            if (s.error) {
+              setToast({ severity: 'error', text: `Sync failed: ${s.error}` });
+            } else {
+              const total = Object.values(s.synced_counts || {}).reduce((a, b) => a + b, 0);
+              setToast({ severity: 'success', text: `Sync complete: ${total} resources imported` });
+            }
+          }
+        } catch { /* ignore */ }
+      }, 1500);
+    } catch (e) {
+      setToast({ severity: 'error', text: e.message });
+    }
+  }, [loadTree]);
+
+  useEffect(() => {
+    return () => {
+      if (syncPollRef.current) clearTimeout(syncPollRef.current);
+    };
+  }, []);
+
+  const [unsyncAnchor, setUnsyncAnchor] = useState(null);
+  const [syncedDomains, setSyncedDomains] = useState([]);
+
+  const handleUnsyncOpen = async (event) => {
+    try {
+      const domains = await api.listSyncedDomains();
+      setSyncedDomains(domains);
+      setUnsyncAnchor(event.currentTarget);
+    } catch (e) {
+      setToast({ severity: 'error', text: e.message });
+    }
+  };
+
+  const handleUnsync = async (domainName) => {
+    setUnsyncAnchor(null);
+    try {
+      await api.unsyncDomain(domainName);
+      setToast({ severity: 'success', text: `Unsynced domain: ${domainName}` });
+      loadTree();
+    } catch (e) {
+      setToast({ severity: 'error', text: e.message });
+    }
+  };
 
   const openResource = async (org, category, type, data) => {
     try {
@@ -183,7 +256,59 @@ export default function App() {
 
             {mainTab === 0 && (
               <>
-                <Tooltip title="Import from Intersight">
+                <Tooltip title={syncStatus === 'running'
+                  ? `Syncing${syncProgress ? ': ' + syncProgress : '...'}`
+                  : syncLastTime
+                    ? `Sync from Intersight (last: ${syncLastTime.toLocaleTimeString()})`
+                    : 'Sync from Intersight — pull live configs into the tree'
+                }>
+                  <span>
+                    <IconButton
+                      onClick={handleSync}
+                      color="inherit"
+                      disabled={syncStatus === 'running'}
+                    >
+                      {syncStatus === 'running'
+                        ? <CircularProgress size={20} color="inherit" />
+                        : <SyncIcon />
+                      }
+                    </IconButton>
+                  </span>
+                </Tooltip>
+                {syncStatus === 'running' && syncProgress && (
+                  <Chip
+                    label={syncProgress}
+                    size="small"
+                    variant="outlined"
+                    sx={{ fontSize: 11, height: 22, mr: 0.5 }}
+                  />
+                )}
+                <Tooltip title="Unsync — remove synced domain data">
+                  <IconButton onClick={handleUnsyncOpen} color="inherit">
+                    <SyncDisabledIcon />
+                  </IconButton>
+                </Tooltip>
+                <Menu
+                  anchorEl={unsyncAnchor}
+                  open={Boolean(unsyncAnchor)}
+                  onClose={() => setUnsyncAnchor(null)}
+                >
+                  {syncedDomains.length === 0 ? (
+                    <MenuItem disabled>
+                      <ListItemText primary="No synced domains" />
+                    </MenuItem>
+                  ) : syncedDomains.map((d) => (
+                    <MenuItem key={d.name} onClick={() => handleUnsync(d.name)}>
+                      <ListItemIcon><FolderIcon fontSize="small" /></ListItemIcon>
+                      <ListItemText
+                        primary={d.name}
+                        secondary={`${d.resource_files} file${d.resource_files !== 1 ? 's' : ''}`}
+                      />
+                      <SyncDisabledIcon fontSize="small" sx={{ ml: 2, color: 'error.main' }} />
+                    </MenuItem>
+                  ))}
+                </Menu>
+                <Tooltip title="Import from Intersight (browse)">
                   <IconButton onClick={() => setImportOpen(true)} color="inherit">
                     <CloudDownloadIcon />
                   </IconButton>

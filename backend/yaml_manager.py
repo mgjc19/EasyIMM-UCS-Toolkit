@@ -1,5 +1,9 @@
 """
 YAML Manager -- reads/writes .ezi.yaml files in the EasyIMM project root.
+
+Also reads per-domain synced data from ``domains/<fqdn>/`` subfolders
+and merges it into the tree so users see what's deployed on each
+connected Intersight domain alongside locally-defined resources.
 """
 
 import os
@@ -10,6 +14,7 @@ from typing import Any
 import yaml
 
 EASYIMM_ROOT = Path(__file__).resolve().parent.parent.parent
+DOMAINS_ROOT = EASYIMM_ROOT / "domains"
 
 FILE_ROUTING = {
     "pools": {
@@ -159,14 +164,60 @@ class YAMLManager:
                     for rtype, resources in cat_data.items():
                         if isinstance(resources, list):
                             tree[org][category][rtype] = [
-                                {"name": r.get("name", "unnamed"), "data": r}
+                                {"name": r.get("name", "unnamed"), "data": r, "_source": "local"}
                                 for r in resources
                             ]
             if org_data.get("create_organization") is not None:
                 tree[org]["create_organization"] = org_data["create_organization"]
             if org_data.get("resource_groups"):
                 tree[org]["resource_groups"] = org_data["resource_groups"]
+
+        self._merge_domain_trees(tree)
         return tree
+
+    def _merge_domain_trees(self, tree: dict) -> None:
+        """Merge synced domain data into the tree, tagging each resource."""
+        if not DOMAINS_ROOT.exists():
+            return
+        for domain_dir in sorted(DOMAINS_ROOT.iterdir()):
+            if not domain_dir.is_dir():
+                continue
+            domain_name = domain_dir.name
+            domain_mgr = YAMLManager(root=str(domain_dir))
+            domain_model = domain_mgr.get_merged_model()
+
+            for org, org_data in domain_model.items():
+                if org in ("global_settings", "_placeholder"):
+                    continue
+                if org not in tree:
+                    tree[org] = {
+                        "pools": {}, "policies": {}, "profiles": {}, "templates": {},
+                        "_synced_domain": domain_name,
+                    }
+                if not isinstance(org_data, dict):
+                    continue
+                for category in ("pools", "policies", "profiles", "templates"):
+                    cat_data = org_data.get(category, {})
+                    if not isinstance(cat_data, dict):
+                        continue
+                    if category not in tree[org]:
+                        tree[org][category] = {}
+                    for rtype, resources in cat_data.items():
+                        if not isinstance(resources, list):
+                            continue
+                        if rtype not in tree[org][category]:
+                            tree[org][category][rtype] = []
+                        local_names = {
+                            r["name"] for r in tree[org][category][rtype]
+                        }
+                        for r in resources:
+                            rname = r.get("name", "unnamed")
+                            if rname not in local_names:
+                                tree[org][category][rtype].append({
+                                    "name": rname,
+                                    "data": r,
+                                    "_source": f"synced:{domain_name}",
+                                })
 
     def get_resources(self, org: str, category: str, resource_type: str) -> list[dict]:
         model = self.get_merged_model()

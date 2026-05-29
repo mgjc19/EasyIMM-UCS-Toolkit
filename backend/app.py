@@ -70,6 +70,10 @@ class ImportPayload(BaseModel):
     categories: Optional[list] = None
 
 
+class SyncPayload(BaseModel):
+    org_filter: Optional[str] = None
+
+
 class RedfishServerPayload(BaseModel):
     endpoint: str
     username: str
@@ -337,6 +341,77 @@ def import_list_resources_by_type(category: str, resource_type: str, org: str = 
         return items
     finally:
         client.close()
+
+
+# ── Intersight Sync endpoints ──
+
+import intersight_sync
+from concurrent.futures import ThreadPoolExecutor
+
+_sync_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="isync")
+
+
+@app.post("/api/sync")
+def trigger_sync(payload: SyncPayload):
+    """Start a background sync from Intersight into local .ezi.yaml files."""
+    status = intersight_sync.get_sync_status()
+    if status["status"] == "running":
+        raise HTTPException(409, "Sync already in progress")
+
+    env_path = EASYIMM_ROOT / "env.sh"
+    api_key_id = ""
+    secret_key = ""
+    intersight_fqdn = "intersight.com"
+
+    if env_path.exists():
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if "intersight_api_key_id" in line and "=" in line:
+                    api_key_id = line.split("=", 1)[1].strip("'\" \n")
+                elif "intersight_secret_key" in line and "=" in line:
+                    secret_key = line.split("=", 1)[1].strip("'\" \n")
+
+    gs_path = EASYIMM_ROOT / "global_settings.ezi.yaml"
+    if gs_path.exists():
+        with open(gs_path) as f:
+            gs = pyyaml.safe_load(f)
+        if isinstance(gs, dict):
+            fqdn = gs.get("global_settings", {}).get("intersight_fqdn")
+            if fqdn:
+                intersight_fqdn = fqdn
+
+    if not api_key_id or not secret_key:
+        raise HTTPException(400, "API credentials not configured. Go to Settings first.")
+
+    _sync_executor.submit(
+        intersight_sync.run_sync,
+        api_key_id, secret_key,
+        f"https://{intersight_fqdn}",
+        payload.org_filter,
+    )
+    return {"ok": True, "message": "Sync started"}
+
+
+@app.get("/api/sync/status")
+def sync_status():
+    """Return current sync state."""
+    return intersight_sync.get_sync_status()
+
+
+@app.get("/api/sync/domains")
+def list_synced_domains():
+    """List all synced Intersight domain folders."""
+    return intersight_sync.list_synced_domains()
+
+
+@app.delete("/api/sync/domains/{domain_name}")
+def unsync_domain(domain_name: str):
+    """Remove a synced domain folder (unsync)."""
+    result = intersight_sync.unsync_domain(domain_name)
+    if not result.get("ok"):
+        raise HTTPException(404, result.get("error", "Unsync failed"))
+    return result
 
 
 # ── Redfish configuration endpoints ──

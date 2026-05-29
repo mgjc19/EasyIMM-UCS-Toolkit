@@ -50,6 +50,16 @@ export const api = {
   importListByType: (category, type, org) =>
     request(`/api/import/resources/${category}/${type}${org ? `?org=${org}` : ''}`),
 
+  triggerSync: (orgFilter) =>
+    request('/api/sync', {
+      method: 'POST',
+      body: JSON.stringify({ org_filter: orgFilter || null }),
+    }),
+  getSyncStatus: () => request('/api/sync/status'),
+  listSyncedDomains: () => request('/api/sync/domains'),
+  unsyncDomain: (domainName) =>
+    request(`/api/sync/domains/${encodeURIComponent(domainName)}`, { method: 'DELETE' }),
+
   previewTechShared: () => request('/api/export/preview/tech-shared'),
   previewTechUcs: () => request('/api/export/preview/tech-ucs'),
   downloadTechShared: () => window.open('/api/export/tech-shared', '_blank'),

@@ -122,10 +122,22 @@ def _create_api_client(api_key_id: str, secret_key_path: str, endpoint: str = "h
     return intersight.ApiClient(configuration)
 
 
-def _extract_resource(result_item) -> dict:
-    """Pull the important fields from an SDK response object."""
+_INTERNAL_FIELDS = frozenset({
+    "moid", "mod_time", "create_time", "class_id", "object_type",
+    "ancestors", "permission_resources", "shared_scope",
+    "version_context", "account_moid", "domain_group_moid",
+    "parent", "owners", "nr_account",
+})
+
+
+def _extract_resource(result_item, full: bool = False) -> dict:
+    """Pull fields from an SDK response object.
+
+    When *full* is True the returned dict includes a ``config`` key
+    containing every settable attribute (internal/computed fields stripped).
+    """
     d = result_item.to_dict() if hasattr(result_item, "to_dict") else dict(result_item)
-    return {
+    summary = {
         "name": d.get("name", "unnamed"),
         "moid": d.get("moid", ""),
         "description": d.get("description", ""),
@@ -133,6 +145,23 @@ def _extract_resource(result_item) -> dict:
         "mod_time": str(d.get("mod_time", "")),
         "organization": _extract_org_name(d),
     }
+    if not full:
+        return summary
+
+    config = {}
+    for key, val in d.items():
+        if key in _INTERNAL_FIELDS:
+            continue
+        if key == "organization":
+            continue
+        if val is None:
+            continue
+        if isinstance(val, dict) and val.get("class_id") == "mo.MoRef":
+            config[key] = {"name": val.get("name", ""), "moid": val.get("moid", "")}
+        else:
+            config[key] = val
+    summary["config"] = config
+    return summary
 
 
 def _extract_org_name(d: dict) -> str:
@@ -192,8 +221,15 @@ class IntersightClient:
             logger.error("Failed to list organizations: %s", exc)
             return []
 
-    def list_resources(self, category: str, resource_type: str, org_filter: str = None) -> list:
-        """List all resources of a given type from Intersight."""
+    def list_resources(
+        self, category: str, resource_type: str,
+        org_filter: str = None, full: bool = False,
+    ) -> list:
+        """List all resources of a given type from Intersight.
+
+        When *full* is True each item includes a ``config`` dict with all
+        settable attributes (needed for the sync feature).
+        """
         endpoints = RESOURCE_ENDPOINTS.get(category, {})
         endpoint = endpoints.get(resource_type)
         if not endpoint:
@@ -210,21 +246,24 @@ class IntersightClient:
 
             result = list_method(**kwargs)
             items = result.results or []
-            return [_extract_resource(item) for item in items]
+            return [_extract_resource(item, full=full) for item in items]
         except Exception as exc:
             logger.warning("Failed to list %s/%s: %s", category, resource_type, exc)
             return []
 
-    def list_all_resources(self, org_filter: str = None) -> dict:
-        """
-        Fetch all supported resource types from Intersight.
-        Returns {category: {resource_type: [resources]}}.
+    def list_all_resources(self, org_filter: str = None, full: bool = False) -> dict:
+        """Fetch all supported resource types from Intersight.
+
+        Returns ``{category: {resource_type: [resources]}}``.
+        When *full* is True, each resource includes a ``config`` body.
         """
         result = {}
         for category, types in RESOURCE_ENDPOINTS.items():
             result[category] = {}
             for resource_type in types:
-                items = self.list_resources(category, resource_type, org_filter)
+                items = self.list_resources(
+                    category, resource_type, org_filter, full=full,
+                )
                 if items:
                     result[category][resource_type] = items
         return result

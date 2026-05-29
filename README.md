@@ -24,13 +24,15 @@ Configuring Cisco UCS infrastructure today requires:
 2. **Multiple disconnected tools** -- Intersight portal for cloud-managed servers, manual Redfish API calls for bare-metal, separate Terraform workspaces for each.
 3. **No visual validation** -- You only discover errors at `terraform plan` time, often after editing dozens of files.
 4. **Documentation gap** -- Design documents get out of sync with actual deployed configuration.
+5. **No visibility into what's already deployed** -- When building new configurations, you can't see what already exists on Intersight without switching to the portal.
 
 This toolkit solves all of these:
 
 - **Visual forms with schema validation** -- Every field is rendered with the correct input type, default values, and validation rules derived from the Easy IMM JSON schema.
 - **Unified interface** -- One tool for both Intersight-managed and Redfish-managed infrastructure.
 - **Live Terraform integration** -- Init, plan, apply, and destroy from the UI with real-time streaming output.
-- **Import from Intersight** -- Pull existing configurations from your Intersight account to see what's already deployed.
+- **Intersight Live Sync** -- Pull existing configurations from your Intersight domain into per-domain folders. See what's deployed while building new resources.
+- **Unsync** -- Remove synced domain data when no longer needed, keeping your workspace clean.
 - **CiscoIQ Doc-as-Code export** -- Generate `data.tech-shared.yaml` and `data.tech-ucs.yaml` files that can be imported into the CiscoIQ platform for automated documentation.
 
 ---
@@ -43,8 +45,8 @@ This toolkit solves all of these:
 ┌─────────────────────────────────────────────────────┐
 │                   Browser (React + MUI)              │
 │  ┌──────────────┐  ┌──────────────┐  ┌───────────┐  │
-│  │  Easy IMM    │  │  Redfish /   │  │  Export /  │  │
-│  │  Config Tab  │  │  Redfish Tab │  │  Import    │  │
+│  │  Easy IMM    │  │  Redfish     │  │  Export /  │  │
+│  │  Config Tab  │  │  Config Tab  │  │  Import    │  │
 │  └──────┬───────┘  └──────┬───────┘  └─────┬─────┘  │
 └─────────┼─────────────────┼────────────────┼────────┘
           │  REST + WebSocket               │
@@ -58,6 +60,8 @@ This toolkit solves all of these:
 │  │  terraform_runner   Stream TF commands      │     │
 │  │  redfish_manager    Redfish TF generation   │     │
 │  │  intersight_client  Intersight SDK import   │     │
+│  │  intersight_sync    Live sync engine        │     │
+│  │  intersight_mapper  API→YAML field mappers  │     │
 │  │  docascode_exporter CiscoIQ YAML export     │     │
 │  └──────────────┬──────────────────┬───────────┘     │
 │                 │                  │                  │
@@ -65,6 +69,7 @@ This toolkit solves all of these:
 │  │  Easy IMM Root  │  │  Redfish Workspace   │      │
 │  │  .ezi.yaml      │  │  .tf / .tfvars       │      │
 │  │  Terraform HCL  │  │  config.json         │      │
+│  │  domains/<fqdn> │  │                      │      │
 │  └────────┬────────┘  └──────────┬───────────┘      │
 │           │                      │                   │
 │           ▼                      ▼                   │
@@ -83,9 +88,51 @@ This toolkit solves all of these:
    - **Direct Push**: Sends REST API calls (PATCH/POST) directly to the BMC Redfish endpoints -- instant, no Terraform required.
    - **Terraform IaC**: Clicks "Generate TF" to create Terraform files (`provider.tf`, `variables.tf`, `main.tf`, `terraform.tfvars`) in the Redfish workspace. Then Init/Plan/Apply deploys via the `ciscodevnet/redfish` Terraform provider with full state management.
 
-3. **Import**: Connects to Cisco Intersight via the official Python SDK to fetch existing organizations, pools, policies, and profiles.
+3. **Intersight Live Sync**: Connects to Intersight via the official Python SDK, fetches full resource objects for all 50+ resource types, maps Intersight API fields to Easy IMM YAML format, and writes the results into per-domain folders (`domains/<fqdn>/`). The tree merges local and synced resources, with synced ones tagged so you can distinguish them.
 
-4. **Export**: Maps both Easy IMM and Redfish configurations into CiscoIQ Document-as-Code YAML format for automated documentation generation.
+4. **Unsync**: Removes a domain folder and all its synced data, instantly cleaning the tree of that domain's resources.
+
+5. **Import (browse)**: Lighter-weight alternative to sync -- connects to Intersight to list resources without writing files. Useful for quick exploration.
+
+6. **Export**: Maps both Easy IMM and Redfish configurations into CiscoIQ Document-as-Code YAML format for automated documentation generation.
+
+### Per-Domain Folder Structure
+
+When you sync from an Intersight domain, the toolkit creates a folder under `domains/` named after the domain FQDN. This folder mirrors the standard Easy IMM directory layout:
+
+```
+domains/
+└── intersight.com/
+    ├── organizations/
+    │   └── organizations.ezi.yaml
+    ├── pools/
+    │   └── pools.ezi.yaml
+    ├── policies/
+    │   ├── compute.ezi.yaml
+    │   ├── management.ezi.yaml
+    │   ├── domain.ezi.yaml
+    │   ├── ethernet.ezi.yaml
+    │   ├── fibre_channel.ezi.yaml
+    │   ├── lan_connectivity.ezi.yaml
+    │   ├── san_connectivity.ezi.yaml
+    │   ├── environment.ezi.yaml
+    │   ├── storage.ezi.yaml
+    │   ├── vlan.ezi.yaml
+    │   ├── vsan.ezi.yaml
+    │   └── port.ezi.yaml
+    ├── profiles/
+    │   ├── server.ezi.yaml
+    │   ├── domain.ezi.yaml
+    │   └── chassis.ezi.yaml
+    └── templates/
+        └── server.ezi.yaml
+```
+
+Each domain folder is independently managed:
+- **Sync** pulls the latest configs from Intersight and writes/updates the files
+- **Unsync** deletes the entire domain folder
+- **Multiple domains** are supported simultaneously -- each gets its own folder
+- **No conflict with local files** -- synced resources are merged into the tree view but stored separately from your local `.ezi.yaml` files
 
 ---
 
@@ -120,19 +167,30 @@ That's it. The `run.sh` script automatically:
 - Builds the frontend if not already built
 - Starts the server on port 8200
 
-### Configuration
+### Initial Configuration
 
-**Intersight API credentials** (for Easy IMM tab):
-1. Click the Settings (gear) icon in the toolbar
+**Intersight API credentials** (required for Easy IMM tab):
+1. Click the **Settings** (gear) icon in the toolbar
 2. Enter your Intersight API Key ID
 3. Enter the path to your `SecretKey.txt` file
 4. Click Save
 
-**Redfish BMC connection** (for Redfish tab):
-1. Switch to the "Redfish" tab
+**Redfish BMC connection** (required for Redfish tab):
+1. Switch to the **Redfish** tab
 2. Enter the BMC endpoint URL (e.g., `https://10.0.0.1`)
 3. Enter username and password
 4. Click Save Connection
+
+### Syncing from Intersight
+
+Once your API credentials are configured:
+
+1. Click the **Sync** button (circular arrow icon) in the Easy IMM toolbar
+2. The sync runs in the background -- a progress indicator shows which resource type is being fetched
+3. When complete, the tree refreshes with all synced resources visible
+4. Synced resources are stored in `domains/<fqdn>/` and tagged in the tree as "synced"
+
+To **remove synced data**, click the **Unsync** button (crossed-out sync icon) and select the domain to remove.
 
 ### Commands
 
@@ -154,19 +212,21 @@ PORT=9000 ./run.sh    # Start on a custom port
 |--------|---------|
 | `app.py` | FastAPI application, REST + WebSocket endpoints, static file serving |
 | `schema_engine.py` | Parses the Easy IMM JSON schema to generate dynamic form definitions |
-| `yaml_manager.py` | CRUD operations on `.ezi.yaml` files organized by organization |
+| `yaml_manager.py` | CRUD operations on `.ezi.yaml` files; merges per-domain synced data into the tree |
 | `terraform_runner.py` | Async subprocess runner for Terraform commands with streaming output |
 | `redfish_manager.py` | Redfish resource schemas, config storage, TF file generation |
 | `redfish_direct.py` | Direct Redfish API push (PATCH/POST to BMC without Terraform) |
-| `intersight_client.py` | Intersight Python SDK wrapper for importing existing configs |
+| `intersight_client.py` | Intersight Python SDK wrapper with full-attribute extraction for sync |
+| `intersight_mapper.py` | Per-resource-type mappers (51 types) that convert Intersight API fields to Easy IMM YAML format |
+| `intersight_sync.py` | Background sync engine -- pulls from Intersight, maps, writes per-domain `.ezi.yaml` files |
 | `docascode_exporter.py` | Maps configs to CiscoIQ Document-as-Code YAML schema |
 
 ### Frontend (React + Vite + Material UI)
 
 | Component | Purpose |
 |-----------|---------|
-| `App.jsx` | Main shell with tab navigation and toolbar |
-| `TreeNavigator.jsx` | Hierarchical tree view of orgs/pools/policies/profiles |
+| `App.jsx` | Main shell with tab navigation, toolbar with Sync/Unsync/Import/Export/Settings buttons |
+| `TreeNavigator.jsx` | Hierarchical tree view of orgs/pools/policies/profiles (local + synced) |
 | `ResourcePanel.jsx` | Dynamic form editor for any Easy IMM resource |
 | `RedfishPanel.jsx` | Redfish server configuration with master-detail layout |
 | `TerraformPanel.jsx` | Real-time Terraform command runner (Easy IMM) |
@@ -174,6 +234,27 @@ PORT=9000 ./run.sh    # Start on a custom port
 | `ExportDialog.jsx` | CiscoIQ Document-as-Code YAML preview and download |
 | `SettingsDialog.jsx` | API key and connection settings |
 | `CloneDialog.jsx` | Clone resources across organizations |
+
+### API Endpoints
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/api/tree` | Resource tree (local + synced domains merged) |
+| `GET` | `/api/orgs` | List organizations |
+| `POST` | `/api/orgs` | Create organization |
+| `GET/POST/DELETE` | `/api/resources/...` | CRUD for resources |
+| `POST` | `/api/sync` | Trigger background Intersight sync |
+| `GET` | `/api/sync/status` | Poll sync progress |
+| `GET` | `/api/sync/domains` | List synced domain folders |
+| `DELETE` | `/api/sync/domains/{name}` | Unsync (remove) a domain |
+| `POST` | `/api/import/test` | Test Intersight connection |
+| `GET` | `/api/import/orgs` | List Intersight orgs |
+| `POST` | `/api/import/resources` | Browse Intersight resources |
+| `POST` | `/api/terraform/{action}` | Run Terraform (init/plan/apply/destroy) |
+| `POST` | `/api/redfish/direct-push` | Direct push to Redfish BMC |
+| `POST` | `/api/redfish/generate` | Generate Redfish Terraform files |
+| `GET` | `/api/export/tech-shared` | Download CiscoIQ tech-shared YAML |
+| `GET` | `/api/export/tech-ucs` | Download CiscoIQ tech-ucs YAML |
 
 ### Key Technologies
 
@@ -184,6 +265,7 @@ PORT=9000 ./run.sh    # Start on a custom port
 - **Vite 8** -- Fast frontend build tool
 - **Terraform** -- Infrastructure as Code engine (Intersight + Redfish providers)
 - **Intersight Python SDK** -- Official SDK for Cisco Intersight API
+- **51 resource mappers** -- Full coverage of all Easy IMM resource types for live sync
 
 ### Project Structure
 
@@ -192,14 +274,24 @@ EasyIMM-UCS-Toolkit/
 ├── run.sh                      # One-command start script
 ├── README.md                   # This file
 ├── .gitignore
+├── domains/                    # Per-domain synced data (auto-created)
+│   └── intersight.com/         # Example: synced from intersight.com
+│       ├── organizations/
+│       ├── pools/
+│       ├── policies/
+│       ├── profiles/
+│       └── templates/
 ├── backend/
 │   ├── requirements.txt        # Python dependencies
 │   ├── app.py                  # FastAPI application
 │   ├── schema_engine.py        # Easy IMM schema parser
-│   ├── yaml_manager.py         # YAML file manager
+│   ├── yaml_manager.py         # YAML file manager (local + domain merge)
 │   ├── terraform_runner.py     # Terraform subprocess runner
 │   ├── redfish_manager.py      # Redfish config + TF generator
-│   ├── intersight_client.py    # Intersight SDK client
+│   ├── redfish_direct.py       # Direct Redfish API push
+│   ├── intersight_client.py    # Intersight SDK client (full attribute pull)
+│   ├── intersight_mapper.py    # 51 Intersight→YAML resource mappers
+│   ├── intersight_sync.py      # Background sync engine (per-domain)
 │   ├── docascode_exporter.py   # CiscoIQ export mapper
 │   └── static/                 # Built frontend (auto-generated)
 ├── frontend/
@@ -223,7 +315,9 @@ EasyIMM-UCS-Toolkit/
 - Dynamic form editor for 50+ resource types (pools, policies, profiles, templates)
 - Schema-validated fields with dropdowns, toggles, and cross-references
 - Resource cloning across organizations
-- Import existing configs from Cisco Intersight
+- **Intersight Live Sync** -- pull all deployed configs into per-domain folders with one click
+- **Unsync** -- remove synced domain data to clean up the tree
+- Import from Intersight (browse mode)
 - Terraform Init / Validate / Plan / Apply / Destroy with live output
 
 ### Redfish Tab
@@ -235,6 +329,15 @@ EasyIMM-UCS-Toolkit/
   - **Direct Push** -- PATCH/POST directly to BMC Redfish API (no Terraform needed, instant apply)
   - **Terraform IaC** -- Generate `.tf` files, plan, and apply with state management
 - Independent Terraform runner for Redfish workspace
+
+### Sync / Unsync
+- **Sync** pulls live Intersight configurations into `domains/<fqdn>/` folders
+- Each domain gets the full Easy IMM directory structure (organizations, pools, policies, profiles, templates)
+- 51 resource type mappers cover all pools, policies, profiles, and templates
+- Synced resources appear in the tree alongside local ones (tagged as "synced")
+- Local resources are never overwritten -- synced data lives in separate folders
+- **Unsync** removes a domain folder entirely, cleaning the tree instantly
+- Multiple domains can be synced simultaneously
 
 ### Export
 - CiscoIQ Document-as-Code export (`data.tech-shared.yaml`, `data.tech-ucs.yaml`)
@@ -252,6 +355,8 @@ EasyIMM-UCS-Toolkit/
 | Port 8200 already in use | Run with a different port: `PORT=9000 ./run.sh` |
 | Intersight auth fails | Verify your API Key ID and SecretKey.txt path in Settings |
 | Frontend not loading | Run `./run.sh build` to rebuild the frontend |
+| Sync shows 0 resources | The connected domain may not have resources of those types deployed |
+| Synced resources not appearing | Click the Refresh button after sync completes |
 
 ---
 
