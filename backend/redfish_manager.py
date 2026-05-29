@@ -320,6 +320,257 @@ REDFISH_SCHEMAS = {
             {"name": "log_service_id", "label": "Log Service ID", "type": "string", "default": "EventLog"},
         ],
     },
+    "user_accounts": {
+        "label": "BMC User Accounts",
+        "description": "Manage local BMC user accounts -- create, update passwords, set roles, enable/disable",
+        "resource_type": "redfish_user_account",
+        "fields": [
+            {"name": "account_id", "label": "Account Slot (1-15)", "type": "integer", "default": 2,
+             "description": "Account slot number. Slot 1 is typically the default admin account."},
+            {"name": "username", "label": "Username", "type": "string", "default": ""},
+            {"name": "password", "label": "Password", "type": "string", "default": "",
+             "description": "New password for the account (8-20 chars, mixed case, numbers, special)"},
+            {"name": "role_id", "label": "Role", "type": "select",
+             "options": ["Administrator", "Operator", "ReadOnly"], "default": "ReadOnly",
+             "description": "Administrator=full control, Operator=operational commands, ReadOnly=view only"},
+            {"name": "account_enabled", "label": "Account Enabled", "type": "boolean", "default": True},
+        ],
+    },
+    "account_service": {
+        "label": "Account Service Settings",
+        "description": "Configure BMC account lockout policies and authentication settings",
+        "resource_type": "redfish_account_service",
+        "fields": [
+            {"name": "account_lockout_threshold", "label": "Lockout Threshold (failed attempts)", "type": "integer", "default": 5,
+             "description": "Number of failed login attempts before account lockout (0 = disabled)"},
+            {"name": "account_lockout_duration", "label": "Lockout Duration (seconds)", "type": "integer", "default": 300,
+             "description": "Duration of account lockout in seconds (0 = locked until admin reset)"},
+            {"name": "account_lockout_counter_reset", "label": "Counter Reset After (seconds)", "type": "integer", "default": 300,
+             "description": "Time after which failed login counter resets"},
+            {"name": "min_password_length", "label": "Minimum Password Length", "type": "integer", "default": 8},
+        ],
+    },
+    "bmc_ethernet": {
+        "label": "BMC Ethernet Interface",
+        "description": "Configure BMC management network interface -- IPv4/IPv6 addressing, VLAN, DNS, hostname",
+        "resource_type": "redfish_bmc_ethernet",
+        "fields": [
+            {"name": "manager_id", "label": "Manager ID", "type": "string", "default": "c885a"},
+            {"name": "interface_id", "label": "Interface ID", "type": "string", "default": "eth0"},
+            {"name": "hostname", "label": "BMC Hostname", "type": "string", "default": ""},
+            {"name": "fqdn", "label": "FQDN", "type": "string", "default": ""},
+            {"name": "ipv4_dhcp_enabled", "label": "IPv4 DHCP Enabled", "type": "boolean", "default": True},
+            {"name": "ipv4_address", "label": "IPv4 Static Address", "type": "string", "default": "",
+             "description": "Only used when DHCP is disabled"},
+            {"name": "ipv4_subnet_mask", "label": "IPv4 Subnet Mask", "type": "string", "default": "255.255.255.0"},
+            {"name": "ipv4_gateway", "label": "IPv4 Gateway", "type": "string", "default": ""},
+            {"name": "ipv6_enabled", "label": "IPv6 Enabled", "type": "boolean", "default": False},
+            {"name": "ipv6_address", "label": "IPv6 Static Address", "type": "string", "default": ""},
+            {"name": "ipv6_prefix_length", "label": "IPv6 Prefix Length", "type": "integer", "default": 64},
+            {"name": "vlan_enabled", "label": "VLAN Enabled", "type": "boolean", "default": False},
+            {"name": "vlan_id", "label": "VLAN ID", "type": "integer", "default": 0,
+             "description": "Management VLAN ID (1-4094)"},
+            {"name": "dns_servers", "label": "DNS Servers", "type": "string_list", "default": []},
+        ],
+    },
+    "chassis_thermal": {
+        "label": "Chassis Thermal",
+        "description": "View and configure chassis thermal sensors, fan speeds, and cooling policies",
+        "resource_type": "redfish_chassis_thermal",
+        "fields": [
+            {"name": "chassis_id", "label": "Chassis ID", "type": "string", "default": "1"},
+        ],
+    },
+    "chassis_power": {
+        "label": "Chassis Power",
+        "description": "View and configure chassis power supplies, power consumption limits, and power capping",
+        "resource_type": "redfish_chassis_power",
+        "fields": [
+            {"name": "chassis_id", "label": "Chassis ID", "type": "string", "default": "1"},
+            {"name": "power_limit_enabled", "label": "Power Limit Enabled", "type": "boolean", "default": False},
+            {"name": "power_limit_watts", "label": "Power Limit (Watts)", "type": "integer", "default": 0,
+             "description": "Maximum power consumption in watts (0 = no limit)"},
+            {"name": "power_limit_exception", "label": "Limit Exception Action", "type": "select",
+             "options": ["NoAction", "HardPowerOff", "LogEventOnly", "Oem"], "default": "NoAction",
+             "description": "Action when power consumption exceeds the limit"},
+        ],
+    },
+    "storage": {
+        "label": "Storage Controllers",
+        "description": "View and configure storage controllers, RAID virtual drives, and physical disks",
+        "resource_type": "redfish_storage",
+        "fields": [
+            {"name": "system_id", "label": "System ID", "type": "string", "default": "system"},
+            {"name": "storage_controller_id", "label": "Storage Controller ID", "type": "string", "default": "",
+             "description": "e.g. SLOT-HBA, SLOT-MEZZ, AHCI"},
+            {"name": "create_virtual_drive", "label": "Create Virtual Drive", "type": "boolean", "default": False},
+            {"name": "vd_name", "label": "Virtual Drive Name", "type": "string", "default": ""},
+            {"name": "raid_type", "label": "RAID Level", "type": "select",
+             "options": ["RAID0", "RAID1", "RAID5", "RAID6", "RAID10", "RAID50", "RAID60", "JBOD"],
+             "default": "RAID1"},
+            {"name": "drive_slots", "label": "Physical Drive Slots", "type": "string", "default": "",
+             "description": "Comma-separated drive slot numbers (e.g. 1,2,3,4)"},
+            {"name": "strip_size_kb", "label": "Strip Size (KB)", "type": "select",
+             "options": ["64", "128", "256", "512", "1024"], "default": "256"},
+            {"name": "read_policy", "label": "Read Policy", "type": "select",
+             "options": ["ReadAhead", "NoReadAhead", "AdaptiveReadAhead"], "default": "ReadAhead"},
+            {"name": "write_policy", "label": "Write Policy", "type": "select",
+             "options": ["WriteThrough", "WriteBack", "WriteBackWithBBU", "AlwaysWriteBack"],
+             "default": "WriteThrough"},
+            {"name": "init_type", "label": "Initialization Type", "type": "select",
+             "options": ["None", "Fast", "Full"], "default": "None"},
+        ],
+    },
+    "firmware_update": {
+        "label": "Firmware Update",
+        "description": "Upload and apply firmware updates via the Redfish UpdateService. Supports BMC, BIOS, CPLD, GPU, NIC, and storage controller firmware.",
+        "resource_type": "redfish_firmware_update",
+        "fields": [
+            {"name": "firmware_image_url", "label": "Firmware Image URL", "type": "string", "default": "",
+             "description": "HTTP/HTTPS/NFS/CIFS URL to the firmware image (.bin/.cap/.rom)"},
+            {"name": "transfer_protocol", "label": "Transfer Protocol", "type": "select",
+             "options": ["HTTP", "HTTPS", "NFS", "CIFS", "TFTP"], "default": "HTTPS"},
+            {"name": "target_component", "label": "Target Component", "type": "select",
+             "options": ["BMC", "BIOS", "CPLD", "GPU", "NIC", "StorageController", "HDD", "SSD"],
+             "default": "BMC",
+             "description": "The component to update"},
+            {"name": "apply_time", "label": "Apply Time", "type": "select",
+             "options": ["Immediate", "OnReset", "AtMaintenanceWindowStart"], "default": "Immediate",
+             "description": "When to activate the firmware: immediately, on next reset, or at scheduled window"},
+            {"name": "force_update", "label": "Force Update", "type": "boolean", "default": False,
+             "description": "Apply even if target is already at the same version"},
+        ],
+    },
+    "certificate_management": {
+        "label": "Certificate Management",
+        "description": "Manage BMC TLS/SSL certificates -- view current certificate, upload custom certificate, or generate CSR",
+        "resource_type": "redfish_certificate",
+        "fields": [
+            {"name": "action", "label": "Action", "type": "select",
+             "options": ["view", "replace", "generate_csr"], "default": "view"},
+            {"name": "certificate_type", "label": "Certificate Type", "type": "select",
+             "options": ["PEM", "PKCS12"], "default": "PEM"},
+            {"name": "certificate_string", "label": "Certificate (PEM)", "type": "string", "default": "",
+             "description": "PEM-encoded certificate content for replacement"},
+            {"name": "private_key_string", "label": "Private Key (PEM)", "type": "string", "default": "",
+             "description": "PEM-encoded private key for replacement"},
+            {"name": "csr_common_name", "label": "CSR Common Name", "type": "string", "default": ""},
+            {"name": "csr_organization", "label": "CSR Organization", "type": "string", "default": ""},
+            {"name": "csr_country", "label": "CSR Country (2-letter)", "type": "string", "default": "US"},
+        ],
+    },
+    "session_service": {
+        "label": "Session Service",
+        "description": "Configure BMC session timeouts and limits",
+        "resource_type": "redfish_session_service",
+        "fields": [
+            {"name": "session_timeout", "label": "Session Timeout (seconds)", "type": "integer", "default": 1800,
+             "description": "Idle session timeout in seconds (60-10800)"},
+            {"name": "max_sessions", "label": "Max Concurrent Sessions", "type": "integer", "default": 4,
+             "description": "Maximum number of simultaneous user sessions"},
+            {"name": "service_enabled", "label": "Session Service Enabled", "type": "boolean", "default": True},
+        ],
+    },
+    "system_inventory": {
+        "label": "System Inventory (Read-Only)",
+        "description": "View server hardware inventory -- processors, memory DIMMs, PCIe devices, network adapters. This is a read-only resource for hardware discovery.",
+        "resource_type": "redfish_system_inventory",
+        "fields": [
+            {"name": "system_id", "label": "System ID", "type": "string", "default": "system"},
+        ],
+    },
+    "manager_reset": {
+        "label": "BMC Reset",
+        "description": "Reset/reboot the BMC management controller. The BMC takes 30-60 seconds to recover.",
+        "resource_type": "redfish_manager_reset",
+        "fields": [
+            {"name": "manager_id", "label": "Manager ID", "type": "string", "default": "c885a"},
+            {"name": "reset_type", "label": "Reset Type", "type": "select",
+             "options": ["GracefulRestart", "ForceRestart"], "default": "GracefulRestart",
+             "description": "GracefulRestart = clean shutdown and restart, ForceRestart = immediate power cycle"},
+            {"name": "confirm_reset", "label": "Confirm BMC Reset", "type": "boolean", "default": False,
+             "description": "Must be checked to execute. BMC will be unreachable for 30-60 seconds."},
+        ],
+    },
+    "syslog_settings": {
+        "label": "Remote Syslog",
+        "description": "Configure BMC remote syslog forwarding for centralized log management",
+        "resource_type": "redfish_syslog",
+        "fields": [
+            {"name": "manager_id", "label": "Manager ID", "type": "string", "default": "c885a"},
+            {"name": "syslog_enabled", "label": "Remote Syslog Enabled", "type": "boolean", "default": False},
+            {"name": "syslog_server_1", "label": "Syslog Server 1", "type": "string", "default": ""},
+            {"name": "syslog_server_2", "label": "Syslog Server 2", "type": "string", "default": ""},
+            {"name": "syslog_port", "label": "Syslog Port", "type": "integer", "default": 514},
+            {"name": "syslog_minimum_severity", "label": "Minimum Severity", "type": "select",
+             "options": ["Emergency", "Alert", "Critical", "Error", "Warning", "Notice", "Informational", "Debug"],
+             "default": "Warning"},
+        ],
+    },
+    "snmp_settings": {
+        "label": "SNMP Configuration",
+        "description": "Configure BMC SNMP settings -- community strings, trap destinations, SNMPv3 users",
+        "resource_type": "redfish_snmp",
+        "fields": [
+            {"name": "snmp_enabled", "label": "SNMP Enabled", "type": "boolean", "default": False},
+            {"name": "snmp_port", "label": "SNMP Port", "type": "integer", "default": 161},
+            {"name": "community_string", "label": "Community String (v1/v2c)", "type": "string", "default": "public"},
+            {"name": "snmp_trap_community", "label": "Trap Community String", "type": "string", "default": "public"},
+            {"name": "trap_destination_1", "label": "Trap Destination 1", "type": "string", "default": ""},
+            {"name": "trap_destination_2", "label": "Trap Destination 2", "type": "string", "default": ""},
+            {"name": "trap_destination_3", "label": "Trap Destination 3", "type": "string", "default": ""},
+            {"name": "snmp_v3_enabled", "label": "SNMPv3 Enabled", "type": "boolean", "default": False},
+            {"name": "snmp_v3_username", "label": "SNMPv3 Username", "type": "string", "default": ""},
+            {"name": "snmp_v3_auth_protocol", "label": "SNMPv3 Auth Protocol", "type": "select",
+             "options": ["None", "MD5", "SHA", "SHA-256"], "default": "SHA"},
+            {"name": "snmp_v3_priv_protocol", "label": "SNMPv3 Privacy Protocol", "type": "select",
+             "options": ["None", "DES", "AES-128", "AES-256"], "default": "AES-128"},
+        ],
+    },
+    "smtp_settings": {
+        "label": "SMTP Email Alerts",
+        "description": "Configure BMC email alert notifications for hardware events and thresholds",
+        "resource_type": "redfish_smtp",
+        "fields": [
+            {"name": "smtp_enabled", "label": "SMTP Enabled", "type": "boolean", "default": False},
+            {"name": "smtp_server", "label": "SMTP Server Address", "type": "string", "default": ""},
+            {"name": "smtp_port", "label": "SMTP Port", "type": "integer", "default": 25},
+            {"name": "smtp_from_address", "label": "From Address", "type": "string", "default": "bmc@example.com"},
+            {"name": "smtp_recipient_1", "label": "Recipient 1", "type": "string", "default": ""},
+            {"name": "smtp_recipient_2", "label": "Recipient 2", "type": "string", "default": ""},
+            {"name": "smtp_minimum_severity", "label": "Minimum Alert Severity", "type": "select",
+             "options": ["Critical", "Warning", "Informational"], "default": "Warning"},
+        ],
+    },
+    "ntp_settings": {
+        "label": "BMC NTP Configuration",
+        "description": "Configure BMC time synchronization via NTP",
+        "resource_type": "redfish_ntp",
+        "fields": [
+            {"name": "manager_id", "label": "Manager ID", "type": "string", "default": "c885a"},
+            {"name": "ntp_enabled", "label": "NTP Enabled", "type": "boolean", "default": True},
+            {"name": "ntp_server_1", "label": "NTP Server 1", "type": "string", "default": "pool.ntp.org"},
+            {"name": "ntp_server_2", "label": "NTP Server 2", "type": "string", "default": ""},
+            {"name": "ntp_server_3", "label": "NTP Server 3", "type": "string", "default": ""},
+            {"name": "ntp_server_4", "label": "NTP Server 4", "type": "string", "default": ""},
+            {"name": "timezone", "label": "Timezone", "type": "string", "default": "UTC",
+             "description": "IANA timezone (e.g. America/Los_Angeles, UTC, Etc/GMT+5)"},
+        ],
+    },
+    "kvm_configuration": {
+        "label": "KVM Configuration",
+        "description": "Configure HTML5 KVM console settings -- encryption, virtual media attachment, port",
+        "resource_type": "redfish_kvm",
+        "fields": [
+            {"name": "kvm_enabled", "label": "KVM Enabled", "type": "boolean", "default": True},
+            {"name": "kvm_port", "label": "KVM Port", "type": "integer", "default": 2068},
+            {"name": "kvm_encryption", "label": "KVM Encryption", "type": "boolean", "default": True,
+             "description": "Enable TLS encryption for KVM sessions"},
+            {"name": "max_kvm_sessions", "label": "Max KVM Sessions", "type": "integer", "default": 4},
+            {"name": "local_server_video", "label": "Local Server Video", "type": "boolean", "default": True,
+             "description": "Enable local video output on the server"},
+        ],
+    },
 }
 
 
@@ -721,6 +972,55 @@ def _generate_resource_block(schema: dict, res_key: str, data: dict, lines: list
   count  = var.clear_event_log ? 1 : 0
   log_id = var.log_service_id
 }}
+''')
+    elif res_key == "user_accounts":
+        lines.append(f'''# BMC User Account -- managed via direct Redfish API push
+# Terraform redfish provider does not natively support account management
+''')
+    elif res_key == "account_service":
+        lines.append(f'''# Account Service settings -- managed via direct Redfish API push
+''')
+    elif res_key == "bmc_ethernet":
+        lines.append(f'''# BMC Ethernet Interface -- managed via direct Redfish API push
+''')
+    elif res_key == "chassis_thermal":
+        lines.append(f'''# Chassis Thermal -- read-only monitoring via direct Redfish API
+''')
+    elif res_key == "chassis_power":
+        lines.append(f'''# Chassis Power -- managed via direct Redfish API push
+''')
+    elif res_key == "storage":
+        lines.append(f'''# Storage RAID configuration -- managed via direct Redfish API push
+''')
+    elif res_key == "firmware_update":
+        lines.append(f'''# Firmware Update -- managed via direct Redfish UpdateService API
+''')
+    elif res_key == "certificate_management":
+        lines.append(f'''# Certificate Management -- managed via direct Redfish CertificateService API
+''')
+    elif res_key == "session_service":
+        lines.append(f'''# Session Service -- managed via direct Redfish API push
+''')
+    elif res_key == "system_inventory":
+        lines.append(f'''# System Inventory -- read-only via direct Redfish API
+''')
+    elif res_key == "manager_reset":
+        lines.append(f'''# BMC Reset -- action via direct Redfish API
+''')
+    elif res_key == "syslog_settings":
+        lines.append(f'''# Remote Syslog -- managed via direct Redfish API push (OEM)
+''')
+    elif res_key == "snmp_settings":
+        lines.append(f'''# SNMP Configuration -- managed via direct Redfish API push
+''')
+    elif res_key == "smtp_settings":
+        lines.append(f'''# SMTP Email Alerts -- managed via direct Redfish API push (OEM)
+''')
+    elif res_key == "ntp_settings":
+        lines.append(f'''# NTP Configuration -- managed via direct Redfish API push
+''')
+    elif res_key == "kvm_configuration":
+        lines.append(f'''# KVM Configuration -- managed via direct Redfish API push (OEM)
 ''')
 
 

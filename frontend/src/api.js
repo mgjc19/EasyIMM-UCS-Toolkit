@@ -80,4 +80,5 @@ export const api = {
   runRedfishTerraform: (action) => request(`/api/redfish/terraform/${action}`, { method: 'POST' }),
   directPushAll: () => request('/api/redfish/direct-push', { method: 'POST' }),
   directPushSingle: (key) => request(`/api/redfish/direct-push/${key}`, { method: 'POST' }),
+  readRedfishLive: () => request('/api/redfish/live'),
 };

@@ -10,7 +10,7 @@ EasyIMM UCS Toolkit is a browser-based application that provides a visual interf
 
 - **Easy IMM** -- The community [Easy IMM](https://github.com/terraform-cisco-modules/easy-imm) Terraform module framework for Cisco Intersight Managed Mode. Manage organizations, pools, policies, profiles, and templates through interactive forms instead of editing YAML files manually.
 
-- **Redfish** -- Direct and Terraform-based configuration for bare-metal servers managed via the Redfish API (e.g., Cisco C885A AI infrastructure nodes). Configure BIOS, boot order, power state, BMC settings, and more through a guided UI. Push changes directly to the BMC or use Terraform for state-managed IaC deployments.
+- **Redfish** -- Comprehensive bare-metal server management via the Redfish API (e.g., Cisco C885A AI infrastructure nodes). 27 resource types covering BIOS (50+ tokens), boot order, power, storage/RAID, firmware updates, user accounts, BMC networking, certificates, KVM, SNMP, syslog, and more. Push changes directly to the BMC or use Terraform for state-managed IaC deployments. **Live state sync** reads the current configuration from the BMC so you can see what's deployed before making changes.
 
 Both tabs include integrated Terraform runners that let you validate, plan, apply, and destroy infrastructure directly from the browser.
 
@@ -84,7 +84,8 @@ This toolkit solves all of these:
 
 1. **Easy IMM tab**: The UI reads the Easy IMM JSON schema (`easy-imm.json`) to dynamically generate forms. When you edit and save a resource, the backend writes `.ezi.yaml` files to the Easy IMM Terraform root. Clicking Plan/Apply runs `terraform plan/apply` in that root directory.
 
-2. **Redfish tab**: The UI presents configuration forms for Redfish resource types (BIOS with 50+ C885A-specific tokens, boot order, power, etc.). Two deployment modes are available:
+2. **Redfish tab**: The UI presents configuration forms for 27 Redfish resource types (BIOS with 50+ C885A-specific tokens, boot order, power, storage/RAID, firmware, user accounts, BMC networking, certificates, KVM, SNMP, syslog, and more). Three interaction modes:
+   - **Live Sync**: Click the cloud-sync icon to read the current live state from the BMC. Each resource shows a "Live BMC State Available" banner with a "Load Live Values" button to populate the form with actual server values.
    - **Direct Push**: Sends REST API calls (PATCH/POST) directly to the BMC Redfish endpoints -- instant, no Terraform required.
    - **Terraform IaC**: Clicks "Generate TF" to create Terraform files (`provider.tf`, `variables.tf`, `main.tf`, `terraform.tfvars`) in the Redfish workspace. Then Init/Plan/Apply deploys via the `ciscodevnet/redfish` Terraform provider with full state management.
 
@@ -214,8 +215,8 @@ PORT=9000 ./run.sh    # Start on a custom port
 | `schema_engine.py` | Parses the Easy IMM JSON schema to generate dynamic form definitions |
 | `yaml_manager.py` | CRUD operations on `.ezi.yaml` files; merges per-domain synced data into the tree |
 | `terraform_runner.py` | Async subprocess runner for Terraform commands with streaming output |
-| `redfish_manager.py` | Redfish resource schemas, config storage, TF file generation |
-| `redfish_direct.py` | Direct Redfish API push (PATCH/POST to BMC without Terraform) |
+| `redfish_manager.py` | 27 Redfish resource schemas, config storage, TF file generation |
+| `redfish_direct.py` | Direct Redfish API push + live state reader (PATCH/POST/GET to BMC) |
 | `intersight_client.py` | Intersight Python SDK wrapper with full-attribute extraction for sync |
 | `intersight_mapper.py` | Per-resource-type mappers (51 types) that convert Intersight API fields to Easy IMM YAML format |
 | `intersight_sync.py` | Background sync engine -- pulls from Intersight, maps, writes per-domain `.ezi.yaml` files |
@@ -251,6 +252,7 @@ PORT=9000 ./run.sh    # Start on a custom port
 | `GET` | `/api/import/orgs` | List Intersight orgs |
 | `POST` | `/api/import/resources` | Browse Intersight resources |
 | `POST` | `/api/terraform/{action}` | Run Terraform (init/plan/apply/destroy) |
+| `GET` | `/api/redfish/live` | Read live BMC state for all resource types |
 | `POST` | `/api/redfish/direct-push` | Direct push to Redfish BMC |
 | `POST` | `/api/redfish/generate` | Generate Redfish Terraform files |
 | `GET` | `/api/export/tech-shared` | Download CiscoIQ tech-shared YAML |
@@ -265,7 +267,8 @@ PORT=9000 ./run.sh    # Start on a custom port
 - **Vite 8** -- Fast frontend build tool
 - **Terraform** -- Infrastructure as Code engine (Intersight + Redfish providers)
 - **Intersight Python SDK** -- Official SDK for Cisco Intersight API
-- **51 resource mappers** -- Full coverage of all Easy IMM resource types for live sync
+- **51 Intersight resource mappers** -- Full coverage of all Easy IMM resource types for live sync
+- **27 Redfish resource types** -- Comprehensive BMC management with live state reading
 
 ### Project Structure
 
@@ -287,8 +290,8 @@ EasyIMM-UCS-Toolkit/
 │   ├── schema_engine.py        # Easy IMM schema parser
 │   ├── yaml_manager.py         # YAML file manager (local + domain merge)
 │   ├── terraform_runner.py     # Terraform subprocess runner
-│   ├── redfish_manager.py      # Redfish config + TF generator
-│   ├── redfish_direct.py       # Direct Redfish API push
+│   ├── redfish_manager.py      # 27 Redfish resource schemas + TF generator
+│   ├── redfish_direct.py       # Direct Redfish push + live state reader
 │   ├── intersight_client.py    # Intersight SDK client (full attribute pull)
 │   ├── intersight_mapper.py    # 51 Intersight→YAML resource mappers
 │   ├── intersight_sync.py      # Background sync engine (per-domain)
@@ -322,9 +325,18 @@ EasyIMM-UCS-Toolkit/
 
 ### Redfish Tab
 - BMC connection management (endpoint, credentials, TLS)
-- 11 configurable resource types: BIOS (50+ C885A tokens), Boot Order, Power, BMC Settings, BMC Network Protocol, Virtual Media, Secure Boot, Identify LED, BIOS Reset, Event Subscriptions, Log Service
+- **27 configurable resource types** covering the full Redfish object model:
+  - **Compute**: BIOS (50+ C885A tokens), BIOS Reset, Boot Order, Power State, Identify LED
+  - **BMC Management**: BMC Settings, BMC Network Protocol, BMC Ethernet Interface, NTP Configuration
+  - **Access & Security**: User Accounts, Account Service (lockout policies), Session Service, Secure Boot, Certificate Management
+  - **Hardware**: Chassis Thermal (read-only sensors), Chassis Power (power capping), Storage Controllers (RAID), System Inventory (read-only)
+  - **Firmware**: Firmware Update (BMC/BIOS/GPU/NIC/CPLD via UpdateService)
+  - **Monitoring**: Remote Syslog, SNMP Configuration, SMTP Email Alerts, Event Subscriptions, Log Service
+  - **Console**: KVM Configuration, Virtual Media
+  - **Actions**: BMC Reset (graceful/force restart)
 - BIOS configuration grouped by category: I/O, Server Management, Security, Memory, Processor, Power/Performance
 - Enable/disable individual resources
+- **Live state sync** -- read the current BMC configuration with one click; green dots show which resources have live data; "Load Live Values" populates forms with actual server values
 - **Two deployment methods:**
   - **Direct Push** -- PATCH/POST directly to BMC Redfish API (no Terraform needed, instant apply)
   - **Terraform IaC** -- Generate `.tf` files, plan, and apply with state management
@@ -357,6 +369,8 @@ EasyIMM-UCS-Toolkit/
 | Frontend not loading | Run `./run.sh build` to rebuild the frontend |
 | Sync shows 0 resources | The connected domain may not have resources of those types deployed |
 | Synced resources not appearing | Click the Refresh button after sync completes |
+| Redfish live sync fails | Verify BMC endpoint, credentials, and that the server is reachable. The sync icon is disabled until a connection is saved. |
+| Redfish shows "BMC connection not configured" | Save the BMC connection first (endpoint + username + password) before clicking the sync icon |
 
 ---
 

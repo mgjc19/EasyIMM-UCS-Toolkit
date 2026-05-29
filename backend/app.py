@@ -459,6 +459,12 @@ def save_redfish_config(resource_key: str, payload: RedfishResourcePayload):
     return {"ok": True}
 
 
+@app.get("/api/redfish/live")
+def read_redfish_live():
+    """Read the current live state from the BMC for all resource types."""
+    return redfish_direct.read_live_state()
+
+
 @app.post("/api/redfish/direct-push")
 def direct_push_all():
     """Push all enabled resource configs directly to the BMC via Redfish API."""

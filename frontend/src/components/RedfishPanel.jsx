@@ -41,6 +41,21 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import LinkIcon from '@mui/icons-material/Link';
 import TuneIcon from '@mui/icons-material/Tune';
 import SendIcon from '@mui/icons-material/Send';
+import PersonIcon from '@mui/icons-material/Person';
+import LockIcon from '@mui/icons-material/Lock';
+import LanIcon from '@mui/icons-material/Lan';
+import ThermostatIcon from '@mui/icons-material/Thermostat';
+import BoltIcon from '@mui/icons-material/Bolt';
+import SystemUpdateIcon from '@mui/icons-material/SystemUpdate';
+import BadgeIcon from '@mui/icons-material/Badge';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import InventoryIcon from '@mui/icons-material/Inventory';
+import SyncIcon from '@mui/icons-material/Sync';
+import CloudSyncIcon from '@mui/icons-material/CloudSync';
+import EmailIcon from '@mui/icons-material/Email';
+import ScheduleIcon from '@mui/icons-material/Schedule';
+import DesktopWindowsIcon from '@mui/icons-material/DesktopWindows';
+import RouterIcon from '@mui/icons-material/Router';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import { api } from '../api';
@@ -57,12 +72,34 @@ const RESOURCE_ICONS = {
   secure_boot: <SecurityIcon fontSize="small" />,
   event_subscription: <NotificationsIcon fontSize="small" />,
   log_service: <StorageIcon fontSize="small" />,
+  user_accounts: <PersonIcon fontSize="small" />,
+  account_service: <LockIcon fontSize="small" />,
+  bmc_ethernet: <LanIcon fontSize="small" />,
+  chassis_thermal: <ThermostatIcon fontSize="small" />,
+  chassis_power: <BoltIcon fontSize="small" />,
+  storage: <StorageIcon fontSize="small" />,
+  firmware_update: <SystemUpdateIcon fontSize="small" />,
+  certificate_management: <BadgeIcon fontSize="small" />,
+  session_service: <AccessTimeIcon fontSize="small" />,
+  system_inventory: <InventoryIcon fontSize="small" />,
+  manager_reset: <SyncIcon fontSize="small" />,
+  syslog_settings: <RouterIcon fontSize="small" />,
+  snmp_settings: <SettingsInputAntennaIcon fontSize="small" />,
+  smtp_settings: <EmailIcon fontSize="small" />,
+  ntp_settings: <ScheduleIcon fontSize="small" />,
+  kvm_configuration: <DesktopWindowsIcon fontSize="small" />,
 };
 
 const RESOURCE_ORDER = [
   'bios', 'bios_reset', 'boot_order', 'power', 'identify_led',
-  'bmc_settings', 'bmc_network_protocol', 'virtual_media',
-  'secure_boot', 'event_subscription', 'log_service',
+  'bmc_settings', 'bmc_network_protocol', 'bmc_ethernet',
+  'user_accounts', 'account_service', 'session_service',
+  'virtual_media', 'secure_boot', 'certificate_management',
+  'storage', 'chassis_thermal', 'chassis_power',
+  'firmware_update', 'system_inventory',
+  'ntp_settings', 'syslog_settings', 'snmp_settings', 'smtp_settings',
+  'kvm_configuration', 'manager_reset',
+  'event_subscription', 'log_service',
 ];
 
 
@@ -358,7 +395,63 @@ function SectionGroup({ label, fields, data, allFields, onChange, defaultOpen })
   );
 }
 
-function ResourceForm({ resourceKey, schema, onSaveToast }) {
+function LiveDataBanner({ liveData, resourceKey, onApply }) {
+  if (!liveData) return null;
+  const keys = Object.keys(liveData).filter((k) => !k.startsWith('_'));
+  const readOnlyKeys = Object.keys(liveData).filter((k) => k.startsWith('_'));
+
+  return (
+    <Alert
+      severity="info" sx={{ mb: 2 }}
+      action={keys.length > 0 ? (
+        <Button color="inherit" size="small" onClick={() => onApply(liveData)}>
+          Load Live Values
+        </Button>
+      ) : null}
+    >
+      <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+        Live BMC State Available
+      </Typography>
+      {keys.length > 0 && (
+        <Typography variant="caption">
+          {keys.length} configurable value(s) read from server. Click &quot;Load Live Values&quot; to populate the form.
+        </Typography>
+      )}
+      {readOnlyKeys.map((k) => {
+        const val = liveData[k];
+        if (Array.isArray(val)) {
+          return (
+            <Box key={k} sx={{ mt: 1 }}>
+              <Typography variant="caption" sx={{ fontWeight: 600 }}>{k.replace(/^_/, '').replace(/_/g, ' ')}:</Typography>
+              {val.slice(0, 8).map((item, i) => (
+                <Typography key={i} variant="caption" sx={{ display: 'block', ml: 1.5, fontFamily: 'monospace' }}>
+                  {typeof item === 'object' ? Object.entries(item).map(([ik, iv]) => `${ik}: ${iv}`).join(', ') : String(item)}
+                </Typography>
+              ))}
+              {val.length > 8 && <Typography variant="caption" sx={{ ml: 1.5 }}>...and {val.length - 8} more</Typography>}
+            </Box>
+          );
+        }
+        if (typeof val === 'object' && val !== null) {
+          return (
+            <Box key={k} sx={{ mt: 1 }}>
+              <Typography variant="caption" sx={{ fontWeight: 600 }}>{k.replace(/^_/, '').replace(/_/g, ' ')}:</Typography>
+              {Object.entries(val).map(([vk, vv]) => (
+                <Typography key={vk} variant="caption" sx={{ display: 'block', ml: 1.5, fontFamily: 'monospace' }}>
+                  {vk}: {String(vv)}
+                </Typography>
+              ))}
+            </Box>
+          );
+        }
+        return null;
+      })}
+    </Alert>
+  );
+}
+
+
+function ResourceForm({ resourceKey, schema, onSaveToast, liveData }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -373,6 +466,17 @@ function ResourceForm({ resourceKey, schema, onSaveToast }) {
 
   const handleFieldChange = (name, value) => {
     setData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleApplyLive = (live) => {
+    setData((prev) => {
+      const merged = { ...prev };
+      for (const [k, v] of Object.entries(live)) {
+        if (!k.startsWith('_')) merged[k] = v;
+      }
+      return merged;
+    });
+    onSaveToast({ severity: 'success', text: 'Live values loaded into form. Save to persist.' });
   };
 
   const handleSave = async () => {
@@ -439,6 +543,9 @@ function ResourceForm({ resourceKey, schema, onSaveToast }) {
             Toggle the switch above to enable it.
           </Alert>
         )}
+
+        <LiveDataBanner liveData={liveData} resourceKey={resourceKey} onApply={handleApplyLive} />
+
         <Typography variant="overline" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
           Terraform resource: <code style={{ color: '#00bceb' }}>{schema.resource_type}</code>
         </Typography>
@@ -746,6 +853,8 @@ export default function RedfishPanel() {
   const [selectedResource, setSelectedResource] = useState(null);
   const [toast, setToast] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [liveState, setLiveState] = useState(null);
+  const [syncing, setSyncing] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -765,6 +874,23 @@ export default function RedfishPanel() {
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  const handleSyncFromServer = useCallback(async () => {
+    setSyncing(true);
+    try {
+      const result = await api.readRedfishLive();
+      if (result.ok) {
+        setLiveState(result.live_state);
+        const count = Object.keys(result.live_state).length;
+        setToast({ severity: 'success', text: `Synced live state for ${count} resource types from BMC` });
+      } else {
+        setToast({ severity: 'error', text: result.error || 'Failed to read from BMC' });
+      }
+    } catch (e) {
+      setToast({ severity: 'error', text: 'Sync failed: ' + e.message });
+    }
+    setSyncing(false);
+  }, []);
 
   if (loading) {
     return (
@@ -798,6 +924,14 @@ export default function RedfishPanel() {
                 Resources
               </Typography>
               <Box sx={{ flex: 1 }} />
+              <Tooltip title={liveState ? `Live state synced (${Object.keys(liveState).length} types)` : 'Sync live state from BMC'}>
+                <IconButton
+                  size="small" onClick={handleSyncFromServer} disabled={syncing || !server?.has_password}
+                  sx={{ color: liveState ? 'success.main' : 'text.secondary' }}
+                >
+                  {syncing ? <CircularProgress size={16} /> : <CloudSyncIcon fontSize="small" />}
+                </IconButton>
+              </Tooltip>
               <Chip
                 label={`${enabledSet.size} active`}
                 size="small"
@@ -843,6 +977,11 @@ export default function RedfishPanel() {
                   >
                     {s.label}
                   </Typography>
+                  {liveState?.[key] && (
+                    <Tooltip title="Live data available">
+                      <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: 'success.main' }} />
+                    </Tooltip>
+                  )}
                   {isEnabled && (
                     <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: 'secondary.main' }} />
                   )}
@@ -860,6 +999,7 @@ export default function RedfishPanel() {
               resourceKey={selectedResource}
               schema={schemas[selectedResource]}
               onSaveToast={setToast}
+              liveData={liveState?.[selectedResource]}
             />
           ) : (
             <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'text.secondary' }}>
@@ -872,8 +1012,9 @@ export default function RedfishPanel() {
                 </Typography>
                 <Paper sx={{ p: 2, mt: 3, bgcolor: 'rgba(0,188,235,0.04)', border: '1px solid', borderColor: 'rgba(0,188,235,0.15)' }}>
                   <Typography variant="caption" color="text.secondary">
-                    Supported: BIOS, Boot Order, Power, BMC Settings, BMC Network, Virtual Media,
-                    Secure Boot, LED, Event Subscriptions, Log Service
+                    27 resource types: BIOS, Boot Order, Power, Storage, Firmware, BMC Network,
+                    User Accounts, Certificates, Thermal, KVM, SNMP, Syslog, and more.
+                    <br />Click the sync icon (☁) to read live state from the BMC.
                   </Typography>
                 </Paper>
               </Box>
