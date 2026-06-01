@@ -89,9 +89,9 @@ This toolkit solves all of these:
    - **Direct Push**: Sends REST API calls (PATCH/POST) directly to the BMC Redfish endpoints -- instant, no Terraform required.
    - **Terraform IaC**: Clicks "Generate TF" to create Terraform files (`provider.tf`, `variables.tf`, `main.tf`, `terraform.tfvars`) in the Redfish workspace. Then Init/Plan/Apply deploys via the `ciscodevnet/redfish` Terraform provider with full state management.
 
-3. **Intersight Live Sync**: Connects to Intersight via the official Python SDK, fetches full resource objects for all 50+ resource types, maps Intersight API fields to Easy IMM YAML format, and writes the results into per-domain folders (`domains/<fqdn>/`). The tree merges local and synced resources, with synced ones tagged so you can distinguish them.
+3. **Intersight Live Sync**: Connects to Intersight via the official Python SDK, fetches full resource objects for all 50+ resource types, maps Intersight API fields to Easy IMM YAML format, and writes the results into per-domain folders (`domains/<fqdn>/`). Organization MOIDs are resolved to their actual names before saving. The tree displays synced resources in a dedicated **"Synced from Intersight"** section, grouped by domain and then by organization -- clearly separated from your local configuration.
 
-4. **Unsync**: Removes a domain folder and all its synced data, instantly cleaning the tree of that domain's resources.
+4. **Unsync**: Removes a domain folder and all its synced data, instantly cleaning the tree of that domain's resources. Also handles legacy synced data (MOID-named organizations stored in the main YAML files from older syncs).
 
 5. **Import (browse)**: Lighter-weight alternative to sync -- connects to Intersight to list resources without writing files. Useful for quick exploration.
 
@@ -203,6 +203,52 @@ To **remove synced data**, click the **Unsync** button (crossed-out sync icon) a
 PORT=9000 ./run.sh    # Start on a custom port
 ```
 
+### Changing the Port
+
+By default the toolkit runs on **port 8200**. If that port is already in use by another application, you can change it in two ways:
+
+**Option 1 -- One-time override (recommended)**
+
+Set the `PORT` environment variable before running:
+
+```bash
+PORT=9000 ./run.sh
+```
+
+The app will start on http://localhost:9000 instead.
+
+**Option 2 -- Find an available port first**
+
+If you're not sure which ports are free, check what's in use:
+
+```bash
+# macOS / Linux
+lsof -i :8200          # Check if 8200 is taken
+lsof -i -P | grep LISTEN   # See all ports in use
+
+# Windows (PowerShell)
+netstat -ano | findstr :8200
+```
+
+Then pick any unused port (e.g., 3000, 5000, 9000, 8080) and start with:
+
+```bash
+PORT=<your-port> ./run.sh
+```
+
+**Option 3 -- Permanent change**
+
+To always use a different port, edit `run.sh` and change the default:
+
+```bash
+# Near the top of run.sh, change:
+PORT="${PORT:-8200}"
+# To your preferred port, e.g.:
+PORT="${PORT:-9000}"
+```
+
+> **Note:** In development mode (`./run.sh dev`), the Vite dev server runs on port 3100 and the backend on the configured port (default 8200). Only the backend port is configurable via `PORT`.
+
 ---
 
 ## Technical Construct
@@ -213,13 +259,13 @@ PORT=9000 ./run.sh    # Start on a custom port
 |--------|---------|
 | `app.py` | FastAPI application, REST + WebSocket endpoints, static file serving |
 | `schema_engine.py` | Parses the Easy IMM JSON schema to generate dynamic form definitions |
-| `yaml_manager.py` | CRUD operations on `.ezi.yaml` files; merges per-domain synced data into the tree |
+| `yaml_manager.py` | CRUD operations on `.ezi.yaml` files; merges per-domain synced data into hierarchical tree; detects legacy MOID orgs |
 | `terraform_runner.py` | Async subprocess runner for Terraform commands with streaming output |
 | `redfish_manager.py` | 27 Redfish resource schemas, config storage, TF file generation |
 | `redfish_direct.py` | Direct Redfish API push + live state reader (PATCH/POST/GET to BMC) |
 | `intersight_client.py` | Intersight Python SDK wrapper with full-attribute extraction for sync |
 | `intersight_mapper.py` | Per-resource-type mappers (51 types) that convert Intersight API fields to Easy IMM YAML format |
-| `intersight_sync.py` | Background sync engine -- pulls from Intersight, maps, writes per-domain `.ezi.yaml` files |
+| `intersight_sync.py` | Background sync engine -- pulls from Intersight, resolves org MOIDs to names, maps and writes per-domain `.ezi.yaml` files |
 | `docascode_exporter.py` | Maps configs to CiscoIQ Document-as-Code YAML schema |
 
 ### Frontend (React + Vite + Material UI)
@@ -227,7 +273,7 @@ PORT=9000 ./run.sh    # Start on a custom port
 | Component | Purpose |
 |-----------|---------|
 | `App.jsx` | Main shell with tab navigation, toolbar with Sync/Unsync/Import/Export/Settings buttons |
-| `TreeNavigator.jsx` | Hierarchical tree view of orgs/pools/policies/profiles (local + synced) |
+| `TreeNavigator.jsx` | Hierarchical tree: local orgs at top, synced domains grouped by Intersight domain → organization with MOID→name resolution |
 | `ResourcePanel.jsx` | Dynamic form editor for any Easy IMM resource |
 | `RedfishPanel.jsx` | Redfish server configuration with master-detail layout |
 | `TerraformPanel.jsx` | Real-time Terraform command runner (Easy IMM) |
@@ -240,7 +286,7 @@ PORT=9000 ./run.sh    # Start on a custom port
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| `GET` | `/api/tree` | Resource tree (local + synced domains merged) |
+| `GET` | `/api/tree` | Resource tree (local orgs + synced domains with MOID→name map) |
 | `GET` | `/api/orgs` | List organizations |
 | `POST` | `/api/orgs` | Create organization |
 | `GET/POST/DELETE` | `/api/resources/...` | CRUD for resources |
@@ -319,6 +365,7 @@ EasyIMM-UCS-Toolkit/
 - Schema-validated fields with dropdowns, toggles, and cross-references
 - Resource cloning across organizations
 - **Intersight Live Sync** -- pull all deployed configs into per-domain folders with one click
+- **Editable synced orgs** -- synced organizations show all categories with Add buttons, so you can create new resources even for orgs with no existing Intersight configuration
 - **Unsync** -- remove synced domain data to clean up the tree
 - Import from Intersight (browse mode)
 - Terraform Init / Validate / Plan / Apply / Destroy with live output
@@ -346,9 +393,12 @@ EasyIMM-UCS-Toolkit/
 - **Sync** pulls live Intersight configurations into `domains/<fqdn>/` folders
 - Each domain gets the full Easy IMM directory structure (organizations, pools, policies, profiles, templates)
 - 51 resource type mappers cover all pools, policies, profiles, and templates
-- Synced resources appear in the tree alongside local ones (tagged as "synced")
+- **Hierarchical tree display**: Synced resources appear in a separate green "Synced from Intersight" section, grouped by domain name, then by organization name -- clearly separated from local configuration
+- **MOID → name resolution**: Organization MOIDs are automatically resolved to their human-readable names (e.g., `CBUCSX-CBUAL.GOV.AE (6791c3a6…)` instead of raw `6791c3a66972653001fd82ff`)
 - Local resources are never overwritten -- synced data lives in separate folders
+- **Add to synced orgs**: All four categories (Pools, Policies, Profiles, Templates) are always visible for synced organizations, with Add buttons enabled -- so you can create new resources for orgs that have no existing configuration on Intersight
 - **Unsync** removes a domain folder entirely, cleaning the tree instantly
+- Also handles **legacy synced data** -- MOID-named organizations from older syncs that were stored directly in the main YAML files can be detected and removed
 - Multiple domains can be synced simultaneously
 
 ### Export
@@ -368,7 +418,9 @@ EasyIMM-UCS-Toolkit/
 | Intersight auth fails | Verify your API Key ID and SecretKey.txt path in Settings |
 | Frontend not loading | Run `./run.sh build` to rebuild the frontend |
 | Sync shows 0 resources | The connected domain may not have resources of those types deployed |
-| Synced resources not appearing | Click the Refresh button after sync completes |
+| Synced resources not appearing | Click the Refresh button after sync completes. Synced resources appear under the green "Synced from Intersight" section at the bottom of the tree. |
+| Org names show as MOIDs | Ensure Intersight credentials are configured. The tree resolves MOIDs to names when a connection is active. |
+| Unsync shows "No synced domains" | No `domains/` folders or legacy MOID organizations were found. Check if data was already unsynced. |
 | Redfish live sync fails | Verify BMC endpoint, credentials, and that the server is reachable. The sync icon is disabled until a connection is saved. |
 | Redfish shows "BMC connection not configured" | Save the BMC connection first (endpoint + username + password) before clicking the sync icon |
 

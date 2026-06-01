@@ -150,35 +150,52 @@ class YAMLManager:
         return [k for k in model.keys() if k != "global_settings"]
 
     def get_resource_tree(self) -> dict:
+        import re
         model = self.get_merged_model()
         tree = {}
+        moid_orgs = {}
+
         for org, org_data in model.items():
             if org == "global_settings":
                 continue
-            tree[org] = {"pools": {}, "policies": {}, "profiles": {}, "templates": {}}
-            if not isinstance(org_data, dict):
-                continue
-            for category in ("pools", "policies", "profiles", "templates"):
-                cat_data = org_data.get(category, {})
-                if isinstance(cat_data, dict):
-                    for rtype, resources in cat_data.items():
-                        if isinstance(resources, list):
-                            tree[org][category][rtype] = [
-                                {"name": r.get("name", "unnamed"), "data": r, "_source": "local"}
-                                for r in resources
-                            ]
-            if org_data.get("create_organization") is not None:
-                tree[org]["create_organization"] = org_data["create_organization"]
-            if org_data.get("resource_groups"):
-                tree[org]["resource_groups"] = org_data["resource_groups"]
+            org_tree = {"pools": {}, "policies": {}, "profiles": {}, "templates": {}}
+            if isinstance(org_data, dict):
+                for category in ("pools", "policies", "profiles", "templates"):
+                    cat_data = org_data.get(category, {})
+                    if isinstance(cat_data, dict):
+                        for rtype, resources in cat_data.items():
+                            if isinstance(resources, list):
+                                org_tree[category][rtype] = [
+                                    {"name": r.get("name", "unnamed"), "data": r, "_source": "local"}
+                                    for r in resources
+                                ]
+                if org_data.get("create_organization") is not None:
+                    org_tree["create_organization"] = org_data["create_organization"]
+                if org_data.get("resource_groups"):
+                    org_tree["resource_groups"] = org_data["resource_groups"]
+
+            is_moid = bool(re.fullmatch(r"[0-9a-f]{24}", org))
+            if is_moid:
+                moid_orgs[org] = org_tree
+            else:
+                tree[org] = org_tree
 
         self._merge_domain_trees(tree)
+
+        if moid_orgs:
+            if "_synced_domains" not in tree:
+                tree["_synced_domains"] = {}
+            tree["_synced_domains"]["intersight (legacy sync)"] = moid_orgs
+
         return tree
 
     def _merge_domain_trees(self, tree: dict) -> None:
-        """Merge synced domain data into the tree, tagging each resource."""
+        """Merge synced domain data into the tree under _synced_domains."""
         if not DOMAINS_ROOT.exists():
             return
+
+        synced_domains = {}
+
         for domain_dir in sorted(DOMAINS_ROOT.iterdir()):
             if not domain_dir.is_dir():
                 continue
@@ -186,38 +203,32 @@ class YAMLManager:
             domain_mgr = YAMLManager(root=str(domain_dir))
             domain_model = domain_mgr.get_merged_model()
 
+            domain_orgs = {}
             for org, org_data in domain_model.items():
                 if org in ("global_settings", "_placeholder"):
                     continue
-                if org not in tree:
-                    tree[org] = {
-                        "pools": {}, "policies": {}, "profiles": {}, "templates": {},
-                        "_synced_domain": domain_name,
-                    }
+                org_tree = {"pools": {}, "policies": {}, "profiles": {}, "templates": {}}
                 if not isinstance(org_data, dict):
+                    domain_orgs[org] = org_tree
                     continue
                 for category in ("pools", "policies", "profiles", "templates"):
                     cat_data = org_data.get(category, {})
                     if not isinstance(cat_data, dict):
                         continue
-                    if category not in tree[org]:
-                        tree[org][category] = {}
                     for rtype, resources in cat_data.items():
                         if not isinstance(resources, list):
                             continue
-                        if rtype not in tree[org][category]:
-                            tree[org][category][rtype] = []
-                        local_names = {
-                            r["name"] for r in tree[org][category][rtype]
-                        }
-                        for r in resources:
-                            rname = r.get("name", "unnamed")
-                            if rname not in local_names:
-                                tree[org][category][rtype].append({
-                                    "name": rname,
-                                    "data": r,
-                                    "_source": f"synced:{domain_name}",
-                                })
+                        org_tree[category][rtype] = [
+                            {"name": r.get("name", "unnamed"), "data": r, "_source": f"synced:{domain_name}"}
+                            for r in resources
+                        ]
+                domain_orgs[org] = org_tree
+
+            if domain_orgs:
+                synced_domains[domain_name] = domain_orgs
+
+        if synced_domains:
+            tree["_synced_domains"] = synced_domains
 
     def get_resources(self, org: str, category: str, resource_type: str) -> list[dict]:
         model = self.get_merged_model()

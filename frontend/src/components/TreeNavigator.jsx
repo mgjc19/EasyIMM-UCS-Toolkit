@@ -15,6 +15,8 @@ import DnsIcon from '@mui/icons-material/Dns';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DescriptionIcon from '@mui/icons-material/Description';
+import CloudIcon from '@mui/icons-material/Cloud';
+import LanIcon from '@mui/icons-material/Lan';
 
 const CATEGORY_ICONS = {
   pools: <StorageIcon fontSize="small" />,
@@ -105,9 +107,63 @@ const FRIENDLY = {
   vnic_template: 'vNIC Template', vsan: 'VSAN', chassis: 'Chassis', domain: 'Domain', server: 'Server',
 };
 
+function OrgTree({ org, orgData, types, onSelect, onAdd, onDelete, onClone, depth = 0, expandedByDefault, icon, synced, displayLabel }) {
+  return (
+    <TreeItem
+      label={displayLabel || org} icon={icon || <FolderIcon fontSize="small" />} depth={depth}
+      expandedByDefault={expandedByDefault}
+      onDelete={synced ? undefined : () => onDelete(org, null, null, null)}
+    >
+      {CATEGORY_ORDER.map((cat) => {
+        const catTypes = types[cat] || [];
+        const orgCat = orgData?.[cat] || {};
+        return (
+          <TreeItem key={cat} label={cat.charAt(0).toUpperCase() + cat.slice(1)} icon={CATEGORY_ICONS[cat]} depth={depth + 1}>
+            {catTypes.map(({ type }) => {
+              const resources = orgCat[type] || [];
+              const isSyncedItem = (r) => r._source && r._source.startsWith('synced:');
+              return (
+                <TreeItem
+                  key={type}
+                  label={FRIENDLY[type] || type}
+                  depth={depth + 2}
+                  count={resources.length}
+                  onAdd={() => onAdd(org, cat, type)}
+                >
+                  {resources.map((r) => (
+                    <TreeItem
+                      key={r.name}
+                      label={r.name}
+                      depth={depth + 3}
+                      onClick={() => onSelect(org, cat, type, r.data)}
+                      onDelete={isSyncedItem(r) ? undefined : () => onDelete(org, cat, type, r.name)}
+                      onClone={() => onClone(org, cat, type, r.name)}
+                    />
+                  ))}
+                </TreeItem>
+              );
+            })}
+          </TreeItem>
+        );
+      })}
+    </TreeItem>
+  );
+}
+
+function resolveMoidLabel(org, moidNames) {
+  if (!moidNames) return org;
+  const name = moidNames[org];
+  if (name) return `${name} (${org.slice(0, 8)}…)`;
+  return org;
+}
+
 export default function TreeNavigator({ tree, types, onSelect, onAdd, onDelete, onClone, onAddOrg }) {
   if (!tree || !types) return null;
-  const orgs = Object.keys(tree);
+
+  const syncedDomains = tree._synced_domains || {};
+  const moidNames = tree._moid_names || {};
+  const localOrgs = Object.keys(tree).filter((k) => !k.startsWith('_'));
+  const hasSynced = Object.keys(syncedDomains).length > 0;
 
   return (
     <Box sx={{ py: 1, overflow: 'auto', height: '100%' }}>
@@ -122,43 +178,45 @@ export default function TreeNavigator({ tree, types, onSelect, onAdd, onDelete, 
           </IconButton>
         </Tooltip>
       </Box>
-      {orgs.map((org) => (
-        <TreeItem key={org} label={org} icon={<FolderIcon fontSize="small" />} depth={0} expandedByDefault={orgs.length <= 3}
-          onDelete={() => onDelete(org, null, null, null)}
-        >
-          {CATEGORY_ORDER.map((cat) => {
-            const catTypes = types[cat] || [];
-            const orgCat = tree[org]?.[cat] || {};
-            return (
-              <TreeItem key={cat} label={cat.charAt(0).toUpperCase() + cat.slice(1)} icon={CATEGORY_ICONS[cat]} depth={1}>
-                {catTypes.map(({ type }) => {
-                  const resources = orgCat[type] || [];
-                  return (
-                    <TreeItem
-                      key={type}
-                      label={FRIENDLY[type] || type}
-                      depth={2}
-                      count={resources.length}
-                      onAdd={() => onAdd(org, cat, type)}
-                    >
-                      {resources.map((r) => (
-                        <TreeItem
-                          key={r.name}
-                          label={r.name}
-                          depth={3}
-                          onClick={() => onSelect(org, cat, type, r.data)}
-                          onDelete={() => onDelete(org, cat, type, r.name)}
-                          onClone={() => onClone(org, cat, type, r.name)}
-                        />
-                      ))}
-                    </TreeItem>
-                  );
-                })}
-              </TreeItem>
-            );
-          })}
-        </TreeItem>
+
+      {localOrgs.map((org) => (
+        <OrgTree
+          key={org} org={org} orgData={tree[org]} types={types}
+          onSelect={onSelect} onAdd={onAdd} onDelete={onDelete} onClone={onClone}
+          expandedByDefault={localOrgs.length <= 3}
+        />
       ))}
+
+      {hasSynced && (
+        <Box sx={{ mt: 1.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', px: 1, mb: 0.5 }}>
+            <CloudIcon sx={{ mr: 1, color: 'success.main', fontSize: 18 }} />
+            <Typography variant="subtitle2" sx={{ flex: 1, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'success.main' }}>
+              Synced from Intersight
+            </Typography>
+          </Box>
+          {Object.entries(syncedDomains).map(([domain, domainOrgs]) => (
+            <TreeItem
+              key={domain}
+              label={domain}
+              icon={<LanIcon fontSize="small" sx={{ color: 'success.main' }} />}
+              depth={0}
+              expandedByDefault
+            >
+              {Object.entries(domainOrgs).map(([org, orgData]) => (
+                <OrgTree
+                  key={org} org={org} orgData={orgData} types={types}
+                  onSelect={onSelect} onAdd={onAdd} onDelete={onDelete} onClone={onClone}
+                  depth={1} expandedByDefault
+                  displayLabel={resolveMoidLabel(org, moidNames)}
+                  icon={<FolderIcon fontSize="small" sx={{ color: 'success.main' }} />}
+                  synced
+                />
+              ))}
+            </TreeItem>
+          ))}
+        </Box>
+      )}
     </Box>
   );
 }

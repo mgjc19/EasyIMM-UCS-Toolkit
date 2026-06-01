@@ -56,31 +56,87 @@ def get_sync_status() -> dict:
         return dict(_sync_state)
 
 
+def _is_moid(name: str) -> bool:
+    """Check if a string looks like a Cisco Intersight MOID (24-char hex)."""
+    import re
+    return bool(re.fullmatch(r"[0-9a-f]{24}", name))
+
+
+def _get_synced_orgs() -> list[str]:
+    """Return org names that look like synced data (MOID-pattern names)."""
+    yaml_mgr = YAMLManager()
+    orgs = yaml_mgr.get_organizations()
+    return [o for o in orgs if _is_moid(o)]
+
+
 def list_synced_domains() -> list[dict]:
-    """Return metadata for every synced domain folder."""
-    if not DOMAINS_ROOT.exists():
-        return []
+    """Return metadata for every synced domain folder + legacy synced orgs."""
     domains = []
-    for d in sorted(DOMAINS_ROOT.iterdir()):
-        if not d.is_dir():
-            continue
-        yaml_count = len(list(d.rglob("*.ezi.yaml")))
+
+    if DOMAINS_ROOT.exists():
+        for d in sorted(DOMAINS_ROOT.iterdir()):
+            if not d.is_dir():
+                continue
+            yaml_count = len(list(d.rglob("*.ezi.yaml")))
+            domains.append({
+                "name": d.name,
+                "path": str(d),
+                "resource_files": yaml_count,
+                "type": "domain_folder",
+            })
+
+    synced_orgs = _get_synced_orgs()
+    if synced_orgs:
         domains.append({
-            "name": d.name,
-            "path": str(d),
-            "resource_files": yaml_count,
+            "name": "Synced Organizations (MOID entries)",
+            "path": str(EASYIMM_ROOT),
+            "resource_files": len(synced_orgs),
+            "type": "legacy_synced",
+            "orgs": synced_orgs,
         })
+
     return domains
 
 
 def unsync_domain(fqdn: str) -> dict:
-    """Remove a synced domain folder and all its .ezi.yaml files."""
+    """Remove a synced domain folder, or clear legacy synced MOID orgs."""
+    if fqdn == "Synced Organizations (MOID entries)":
+        return _unsync_legacy_orgs()
+
     domain_path = _domain_dir(fqdn)
     if not domain_path.exists():
         return {"ok": False, "error": f"Domain folder not found: {fqdn}"}
     shutil.rmtree(domain_path)
     logger.info("Unsynced domain: %s (removed %s)", fqdn, domain_path)
     return {"ok": True, "removed": str(domain_path)}
+
+
+def _unsync_legacy_orgs() -> dict:
+    """Remove all MOID-named organizations from the main .ezi.yaml files."""
+    import yaml as pyyaml
+
+    yaml_mgr = YAMLManager()
+    moid_orgs = _get_synced_orgs()
+    if not moid_orgs:
+        return {"ok": True, "removed": 0}
+
+    removed_count = 0
+    for yaml_file in yaml_mgr._yaml_files():
+        data = yaml_mgr._read_yaml(yaml_file)
+        changed = False
+        for org in list(data.keys()):
+            if _is_moid(org):
+                del data[org]
+                changed = True
+                removed_count += 1
+        if changed:
+            if data:
+                yaml_mgr._write_yaml(yaml_file, data)
+            else:
+                yaml_file.unlink(missing_ok=True)
+
+    logger.info("Unsynced %d legacy MOID organizations from main YAML files", len(moid_orgs))
+    return {"ok": True, "removed_orgs": moid_orgs, "removed_count": len(moid_orgs)}
 
 
 def run_sync(
@@ -119,6 +175,11 @@ def run_sync(
             _set_error(f"Connection failed: {conn.get('error', 'unknown')}")
             return {"ok": False, "error": _sync_state["error"]}
 
+        with _sync_lock:
+            _sync_state["progress"] = "fetching organizations"
+        orgs = client.list_organizations()
+        moid_to_name = {o["moid"]: o["name"] for o in orgs}
+
         domain_path = _domain_dir(fqdn)
         _scaffold_domain(domain_path)
 
@@ -146,6 +207,7 @@ def run_sync(
                     if not cfg:
                         continue
                     org_name = item.get("organization", "default")
+                    org_name = moid_to_name.get(org_name, org_name)
 
                     mapped = map_resource(category, resource_type, cfg)
                     if mapped is None:

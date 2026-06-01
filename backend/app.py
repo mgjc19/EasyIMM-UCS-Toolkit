@@ -105,7 +105,29 @@ def get_resource_schema(category: str, resource_type: str):
 
 @app.get("/api/tree")
 def get_resource_tree():
-    return yaml_mgr.get_resource_tree()
+    tree = yaml_mgr.get_resource_tree()
+    moid_map = _resolve_moid_names()
+    if moid_map:
+        tree["_moid_names"] = moid_map
+    return tree
+
+
+def _resolve_moid_names() -> dict:
+    """Try to resolve MOID org names from Intersight (best-effort, cached)."""
+    import re
+    if not hasattr(_resolve_moid_names, "_cache"):
+        _resolve_moid_names._cache = {}
+    if _resolve_moid_names._cache:
+        return _resolve_moid_names._cache
+    try:
+        client = _get_intersight_client()
+        orgs = client.list_organizations()
+        mapping = {o["moid"]: o["name"] for o in orgs}
+        if mapping:
+            _resolve_moid_names._cache = mapping
+        return mapping
+    except Exception:
+        return {}
 
 
 @app.get("/api/orgs")
