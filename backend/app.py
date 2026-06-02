@@ -436,6 +436,78 @@ def unsync_domain(domain_name: str):
     return result
 
 
+# ── Import from local Easy IMM workspace ──
+
+
+class LocalImportPayload(BaseModel):
+    path: str
+
+
+@app.post("/api/import-local/preview")
+def import_local_preview(payload: LocalImportPayload):
+    """Preview what would be imported from another Easy IMM workspace."""
+    src = Path(payload.path)
+    if not src.is_dir():
+        raise HTTPException(400, f"Directory not found: {payload.path}")
+
+    src_mgr = YAMLManager(root=str(src))
+    model = src_mgr.get_merged_model()
+
+    summary = {}
+    total = 0
+    for org, org_data in model.items():
+        if org in ("global_settings", "_placeholder"):
+            continue
+        org_summary = {}
+        if not isinstance(org_data, dict):
+            continue
+        for category in ("pools", "policies", "profiles", "templates"):
+            cat_data = org_data.get(category, {})
+            if not isinstance(cat_data, dict):
+                continue
+            for rtype, resources in cat_data.items():
+                if isinstance(resources, list) and resources:
+                    org_summary[f"{category}/{rtype}"] = len(resources)
+                    total += len(resources)
+        if org_summary:
+            summary[org] = org_summary
+
+    return {"orgs": summary, "total": total, "path": str(src)}
+
+
+@app.post("/api/import-local/apply")
+def import_local_apply(payload: LocalImportPayload):
+    """Import resources from another Easy IMM workspace into the current one."""
+    src = Path(payload.path)
+    if not src.is_dir():
+        raise HTTPException(400, f"Directory not found: {payload.path}")
+
+    src_mgr = YAMLManager(root=str(src))
+    model = src_mgr.get_merged_model()
+
+    imported = 0
+    for org, org_data in model.items():
+        if org in ("global_settings", "_placeholder"):
+            continue
+        if not isinstance(org_data, dict):
+            continue
+
+        yaml_mgr.create_organization(org)
+
+        for category in ("pools", "policies", "profiles", "templates"):
+            cat_data = org_data.get(category, {})
+            if not isinstance(cat_data, dict):
+                continue
+            for rtype, resources in cat_data.items():
+                if not isinstance(resources, list):
+                    continue
+                for resource in resources:
+                    yaml_mgr.save_resource(org, category, rtype, resource)
+                    imported += 1
+
+    return {"ok": True, "imported": imported}
+
+
 # ── Redfish configuration endpoints ──
 
 import redfish_manager

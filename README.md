@@ -12,7 +12,7 @@ EasyIMM UCS Toolkit is a browser-based application that provides a visual interf
 
 - **Redfish** -- Comprehensive bare-metal server management via the Redfish API (e.g., Cisco C885A AI infrastructure nodes). 27 resource types covering BIOS (50+ tokens), boot order, power, storage/RAID, firmware updates, user accounts, BMC networking, certificates, KVM, SNMP, syslog, and more. Push changes directly to the BMC or use Terraform for state-managed IaC deployments. **Live state sync** reads the current configuration from the BMC so you can see what's deployed before making changes.
 
-Both tabs include integrated Terraform runners that let you validate, plan, apply, and destroy infrastructure directly from the browser.
+Both tabs include integrated Terraform runners that let you validate, plan, apply, and destroy infrastructure directly from the browser. The Redfish provider is synced with the battle-tested [ai-pods](https://github.com/cisco/ai-pods) `cisco/redfish` v1.0.1 provider configuration, including session auth, retry/timeout settings, orchestrated reboots, and RAID volume management.
 
 ---
 
@@ -324,6 +324,8 @@ PORT="${PORT:-9000}"
 | `GET` | `/api/orgs` | List organizations |
 | `POST` | `/api/orgs` | Create organization |
 | `GET/POST/DELETE` | `/api/resources/...` | CRUD for resources |
+| `POST` | `/api/import-local/preview` | Preview import from a local Easy IMM workspace |
+| `POST` | `/api/import-local/apply` | Import resources from a local Easy IMM workspace |
 | `POST` | `/api/sync` | Trigger background Intersight sync |
 | `GET` | `/api/sync/status` | Poll sync progress |
 | `GET` | `/api/sync/domains` | List synced domain folders |
@@ -413,6 +415,7 @@ your-easy-imm-repo/
 - **Intersight Live Sync** -- pull all deployed configs into per-domain folders with one click
 - **Editable synced orgs** -- synced organizations show all categories with Add buttons, so you can create new resources even for orgs with no existing Intersight configuration
 - **Unsync** -- remove synced domain data to clean up the tree
+- **Import from local workspace** -- point to any existing Easy IMM folder to import all its orgs and resources with preview before apply
 - Import from Intersight (browse mode)
 - Terraform Init / Validate / Plan / Apply / Destroy with live output
 

@@ -12,6 +12,7 @@ import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import SyncIcon from '@mui/icons-material/Sync';
 import SyncDisabledIcon from '@mui/icons-material/SyncDisabled';
+import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import CircularProgress from '@mui/material/CircularProgress';
 import Chip from '@mui/material/Chip';
 import Menu from '@mui/material/Menu';
@@ -50,6 +51,10 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [localImportOpen, setLocalImportOpen] = useState(false);
+  const [localImportPath, setLocalImportPath] = useState('');
+  const [localImportPreview, setLocalImportPreview] = useState(null);
+  const [localImporting, setLocalImporting] = useState(false);
   const [toast, setToast] = useState(null);
 
   const [panelSchema, setPanelSchema] = useState(null);
@@ -139,6 +144,32 @@ export default function App() {
       loadTree();
     } catch (e) {
       setToast({ severity: 'error', text: e.message });
+    }
+  };
+
+  const handleLocalImportPreview = async () => {
+    if (!localImportPath.trim()) return;
+    try {
+      const result = await api.importLocalPreview(localImportPath.trim());
+      setLocalImportPreview(result);
+    } catch (e) {
+      setToast({ severity: 'error', text: e.message });
+    }
+  };
+
+  const handleLocalImportApply = async () => {
+    setLocalImporting(true);
+    try {
+      const result = await api.importLocalApply(localImportPath.trim());
+      setToast({ severity: 'success', text: `Imported ${result.imported} resources` });
+      setLocalImportOpen(false);
+      setLocalImportPreview(null);
+      setLocalImportPath('');
+      loadTree();
+    } catch (e) {
+      setToast({ severity: 'error', text: e.message });
+    } finally {
+      setLocalImporting(false);
     }
   };
 
@@ -313,6 +344,11 @@ export default function App() {
                     <CloudDownloadIcon />
                   </IconButton>
                 </Tooltip>
+                <Tooltip title="Import from local Easy IMM workspace">
+                  <IconButton onClick={() => setLocalImportOpen(true)} color="inherit">
+                    <FolderOpenIcon />
+                  </IconButton>
+                </Tooltip>
                 <Tooltip title="Refresh">
                   <IconButton onClick={loadTree} color="inherit"><RefreshIcon /></IconButton>
                 </Tooltip>
@@ -423,6 +459,60 @@ export default function App() {
         <DialogActions>
           <Button onClick={() => setDeleteConfirm(null)}>Cancel</Button>
           <Button variant="contained" color="error" onClick={confirmDelete}>Delete</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Import local workspace dialog */}
+      <Dialog
+        open={localImportOpen}
+        onClose={() => { setLocalImportOpen(false); setLocalImportPreview(null); setLocalImportPath(''); }}
+        maxWidth="sm" fullWidth
+      >
+        <DialogTitle>Import from Local Easy IMM Workspace</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
+            Enter the path to an existing Easy IMM workspace folder (containing .ezi.yaml files).
+            All organizations and resources will be imported into the current workspace.
+          </Typography>
+          <TextField
+            fullWidth autoFocus label="Workspace Path" margin="dense"
+            placeholder="/path/to/easy-imm-workspace"
+            value={localImportPath}
+            onChange={(e) => { setLocalImportPath(e.target.value); setLocalImportPreview(null); }}
+            onKeyDown={(e) => e.key === 'Enter' && handleLocalImportPreview()}
+          />
+          {localImportPreview && (
+            <Box sx={{ mt: 2, p: 2, bgcolor: 'background.default', borderRadius: 1, maxHeight: 300, overflow: 'auto' }}>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Preview: {localImportPreview.total} resources across {Object.keys(localImportPreview.orgs).length} org(s)
+              </Typography>
+              {Object.entries(localImportPreview.orgs).map(([org, types]) => (
+                <Box key={org} sx={{ mb: 1 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>{org}</Typography>
+                  {Object.entries(types).map(([type, count]) => (
+                    <Typography key={type} variant="caption" sx={{ display: 'block', pl: 2, color: 'text.secondary' }}>
+                      {type}: {count}
+                    </Typography>
+                  ))}
+                </Box>
+              ))}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => { setLocalImportOpen(false); setLocalImportPreview(null); setLocalImportPath(''); }}>Cancel</Button>
+          {!localImportPreview ? (
+            <Button variant="outlined" onClick={handleLocalImportPreview} disabled={!localImportPath.trim()}>
+              Preview
+            </Button>
+          ) : (
+            <Button
+              variant="contained" onClick={handleLocalImportApply} disabled={localImporting || localImportPreview.total === 0}
+              startIcon={localImporting ? <CircularProgress size={16} /> : null}
+            >
+              {localImporting ? 'Importing...' : `Import ${localImportPreview.total} Resources`}
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
 

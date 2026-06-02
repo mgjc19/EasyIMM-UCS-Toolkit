@@ -695,18 +695,24 @@ def generate_terraform_files():
     resources = cfg.get("resources", {})
 
     provider_tf = '''terraform {
+  required_version = ">= 1.0"
   required_providers {
     redfish = {
-      source = "cisco/redfish"
+      source  = "cisco/redfish"
+      version = "1.0.1"
     }
   }
 }
 
 provider "redfish" {
-  endpoint = var.bmc_endpoint
-  username = var.bmc_username
-  password = var.bmc_password
-  insecure = var.bmc_insecure
+  endpoint            = var.bmc_endpoint
+  username            = var.bmc_username
+  password            = var.bmc_password
+  insecure            = var.bmc_insecure
+  use_session_auth    = var.use_session_auth
+  retry_count         = var.retry_count
+  retry_delay_seconds = var.retry_delay_seconds
+  timeout_seconds     = var.timeout_seconds
 }
 '''
 
@@ -715,14 +721,22 @@ provider "redfish" {
         'variable "bmc_username" {\n  type = string\n}\n',
         'variable "bmc_password" {\n  type      = string\n  sensitive = true\n}\n',
         'variable "bmc_insecure" {\n  type    = bool\n  default = true\n}\n',
+        'variable "use_session_auth" {\n  type    = bool\n  default = false\n}\n',
+        'variable "retry_count" {\n  type    = number\n  default = 3\n}\n',
+        'variable "retry_delay_seconds" {\n  type    = number\n  default = 2\n}\n',
+        'variable "timeout_seconds" {\n  type    = number\n  default = 30\n}\n',
     ]
 
     main_lines = []
     tfvars_lines = [
-        f'bmc_endpoint = "{server.get("endpoint", "")}"',
-        f'bmc_username = "{server.get("username", "admin")}"',
-        f'bmc_password = "{server.get("password", "")}"',
-        f'bmc_insecure = {_tf_value(server.get("insecure", True))}',
+        f'bmc_endpoint        = "{server.get("endpoint", "")}"',
+        f'bmc_username        = "{server.get("username", "admin")}"',
+        f'bmc_password        = "{server.get("password", "")}"',
+        f'bmc_insecure        = {_tf_value(server.get("insecure", True))}',
+        f'use_session_auth    = {_tf_value(server.get("use_session_auth", False))}',
+        f'retry_count         = {_tf_value(server.get("retry_count", 3))}',
+        f'retry_delay_seconds = {_tf_value(server.get("retry_delay_seconds", 2))}',
+        f'timeout_seconds     = {_tf_value(server.get("timeout_seconds", 30))}',
         '',
     ]
 
@@ -736,7 +750,7 @@ provider "redfish" {
 
         if res_key == "bios":
             merged_attrs = build_bios_attributes(data)
-            for var_name in ("system_id", "reboot_on_changes", "bios_attributes"):
+            for var_name in ("system_id", "reboot_on_changes", "bios_wrapper_key", "bios_attributes"):
                 if var_name in all_vars_declared:
                     continue
                 all_vars_declared.add(var_name)
@@ -750,6 +764,10 @@ provider "redfish" {
                     val = data.get("reboot_on_changes", True)
                     variables_lines.append(f'variable "reboot_on_changes" {{\n  type    = bool\n  default = {_tf_value(val)}\n}}\n')
                     tfvars_lines.append(f'reboot_on_changes = {_tf_value(val)}')
+                elif var_name == "bios_wrapper_key":
+                    val = data.get("bios_wrapper_key", "Attributes")
+                    variables_lines.append(f'variable "bios_wrapper_key" {{\n  type    = string\n  default = {_tf_value(val)}\n}}\n')
+                    tfvars_lines.append(f'bios_wrapper_key = {_tf_value(val)}')
                 else:
                     val = data.get("system_id", "system")
                     variables_lines.append(f'variable "system_id" {{\n  type    = string\n  default = {_tf_value(val)}\n}}\n')
@@ -888,6 +906,7 @@ def _generate_resource_block(schema: dict, res_key: str, data: dict, lines: list
         lines.append(f'''resource "{rt}" "managed" {{
   count             = length(var.bios_attributes) > 0 ? 1 : 0
   system_id         = var.system_id
+  wrapper_key       = var.bios_wrapper_key
   bios_attributes   = var.bios_attributes
   reboot_on_changes = var.reboot_on_changes
 }}
@@ -904,6 +923,16 @@ def _generate_resource_block(schema: dict, res_key: str, data: dict, lines: list
   boot_target       = join(", ", [for d in var.boot_devices : d.alias])
   boot_order        = [for d in var.boot_devices : d.id]
   reboot_on_changes = var.reboot_on_changes
+}}
+
+resource "redfish_reboot" "after_changes" {{
+  system_id         = var.system_id
+  reboot_on_changes = var.reboot_on_changes
+  triggers = {{
+    boot_order      = join(",", [for d in var.boot_devices : d.id])
+    bios_attributes = jsonencode(var.bios_attributes)
+  }}
+  depends_on = [redfish_boot.managed, redfish_bios.managed]
 }}
 ''')
     elif res_key == "power":
@@ -974,8 +1003,12 @@ def _generate_resource_block(schema: dict, res_key: str, data: dict, lines: list
 }}
 ''')
     elif res_key == "user_accounts":
-        lines.append(f'''# BMC User Account -- managed via direct Redfish API push
-# Terraform redfish provider does not natively support account management
+        lines.append(f'''resource "redfish_user" "managed" {{
+  count    = var.test_username != "" ? 1 : 0
+  username = var.test_username
+  password = var.test_user_password
+  role     = var.test_user_role
+}}
 ''')
     elif res_key == "account_service":
         lines.append(f'''# Account Service settings -- managed via direct Redfish API push
@@ -990,7 +1023,14 @@ def _generate_resource_block(schema: dict, res_key: str, data: dict, lines: list
         lines.append(f'''# Chassis Power -- managed via direct Redfish API push
 ''')
     elif res_key == "storage":
-        lines.append(f'''# Storage RAID configuration -- managed via direct Redfish API push
+        lines.append(f'''resource "redfish_storage_volume" "managed" {{
+  count              = var.create_storage_volume ? 1 : 0
+  storage_id         = var.storage_id
+  volume_name        = var.storage_volume_name
+  raid_type          = var.storage_volume_raid_type
+  capacity_bytes     = var.storage_volume_capacity_bytes
+  physical_disk_ids  = var.storage_volume_physical_disks
+}}
 ''')
     elif res_key == "firmware_update":
         lines.append(f'''# Firmware Update -- managed via direct Redfish UpdateService API

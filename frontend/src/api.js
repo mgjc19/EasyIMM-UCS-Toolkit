@@ -60,6 +60,11 @@ export const api = {
   unsyncDomain: (domainName) =>
     request(`/api/sync/domains/${encodeURIComponent(domainName)}`, { method: 'DELETE' }),
 
+  importLocalPreview: (path) =>
+    request('/api/import-local/preview', { method: 'POST', body: JSON.stringify({ path }) }),
+  importLocalApply: (path) =>
+    request('/api/import-local/apply', { method: 'POST', body: JSON.stringify({ path }) }),
+
   previewTechShared: () => request('/api/export/preview/tech-shared'),
   previewTechUcs: () => request('/api/export/preview/tech-ucs'),
   downloadTechShared: () => window.open('/api/export/tech-shared', '_blank'),
