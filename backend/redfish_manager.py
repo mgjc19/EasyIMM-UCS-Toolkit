@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 from typing import Optional
 
-WORKSPACE = Path(__file__).resolve().parent.parent / "redfish-workspace"
+from paths import REDFISH_WORKSPACE as WORKSPACE
 
 REDFISH_SCHEMAS = {
     "bios": {

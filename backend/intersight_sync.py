@@ -19,11 +19,10 @@ from pathlib import Path
 from typing import Any
 
 from intersight_mapper import MAPPERS, map_resource
-from yaml_manager import YAMLManager, EASYIMM_ROOT
+from yaml_manager import YAMLManager
+from paths import EASYIMM_ROOT, DOMAINS_ROOT
 
 logger = logging.getLogger(__name__)
-
-DOMAINS_ROOT = EASYIMM_ROOT / "domains"
 
 _sync_lock = threading.Lock()
 

@@ -7,6 +7,7 @@ FRONTEND_DIR="$SCRIPT_DIR/frontend"
 STATIC_DIR="$BACKEND_DIR/static"
 PID_DIR="$SCRIPT_DIR/.pids"
 PORT="${PORT:-8200}"
+export EASYIMM_ROOT="${EASYIMM_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'

@@ -13,8 +13,7 @@ from typing import Any
 
 import yaml
 
-EASYIMM_ROOT = Path(__file__).resolve().parent.parent.parent
-DOMAINS_ROOT = EASYIMM_ROOT / "domains"
+from paths import EASYIMM_ROOT, DOMAINS_ROOT
 
 FILE_ROUTING = {
     "pools": {

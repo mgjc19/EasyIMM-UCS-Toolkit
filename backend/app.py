@@ -22,10 +22,10 @@ from fastapi.responses import FileResponse, Response
 from schema_engine import SchemaEngine
 from yaml_manager import YAMLManager
 from terraform_runner import TerraformRunner
+from paths import EASYIMM_ROOT
 
 logger = logging.getLogger(__name__)
 
-EASYIMM_ROOT = Path(__file__).resolve().parent.parent.parent
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 

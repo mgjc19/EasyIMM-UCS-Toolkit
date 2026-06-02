@@ -7,7 +7,8 @@ import os
 import re
 from pathlib import Path
 
-EASYIMM_ROOT = Path(__file__).resolve().parent.parent.parent
+from paths import EASYIMM_ROOT
+
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 
 

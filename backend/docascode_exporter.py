@@ -10,9 +10,7 @@ from pathlib import Path
 
 import yaml as pyyaml
 
-
-EASYIMM_ROOT = Path(__file__).resolve().parent.parent.parent
-REDFISH_WORKSPACE = Path(__file__).resolve().parent.parent / "redfish-workspace"
+from paths import EASYIMM_ROOT, REDFISH_WORKSPACE
 
 
 def _load_redfish_config() -> dict:

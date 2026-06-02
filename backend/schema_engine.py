@@ -13,7 +13,9 @@ import json
 import re
 from pathlib import Path
 
-SCHEMA_PATH = Path(__file__).resolve().parent.parent.parent / "yaml_schema" / "easy-imm.json"
+from paths import EASYIMM_ROOT
+
+SCHEMA_PATH = EASYIMM_ROOT / "yaml_schema" / "easy-imm.json"
 
 CATEGORY_MAP = {
     "pools": [

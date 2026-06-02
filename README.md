@@ -151,7 +151,8 @@ Each domain folder is independently managed:
 ### Quick Start (3 steps)
 
 ```bash
-# 1. Clone the repository
+# 1. Clone the repository inside your Easy IMM workspace
+cd /path/to/your/easy-imm
 git clone https://github.com/mgjc19/EasyIMM-UCS-Toolkit.git
 cd EasyIMM-UCS-Toolkit
 
@@ -167,6 +168,37 @@ That's it. The `run.sh` script automatically:
 - Creates a virtual environment and installs dependencies
 - Builds the frontend if not already built
 - Starts the server on port 8200
+
+### Connecting to Your Easy IMM Workspace
+
+By default, the app looks for the Easy IMM Terraform files in the **parent directory** (one level up from the app folder). This works when the app folder is placed inside your Easy IMM repo:
+
+```
+your-easy-imm-repo/          ← EASYIMM_ROOT (auto-detected)
+├── main.tf
+├── variables.tf
+├── organizations/
+├── policies/
+├── pools/
+├── yaml_schema/
+└── EasyIMM-UCS-Toolkit/     ← The app lives here
+    ├── run.sh
+    ├── backend/
+    └── frontend/
+```
+
+If your app folder is somewhere else, point it to the Easy IMM workspace:
+
+```bash
+EASYIMM_ROOT=/path/to/your/easy-imm ./run.sh
+```
+
+Or export it in your shell profile for persistence:
+
+```bash
+export EASYIMM_ROOT=/path/to/your/easy-imm
+./run.sh
+```
 
 ### Initial Configuration
 
@@ -196,11 +228,12 @@ To **remove synced data**, click the **Unsync** button (crossed-out sync icon) a
 ### Commands
 
 ```bash
-./run.sh              # Start in production mode (single port: 8200)
-./run.sh dev          # Start in development mode (hot-reload, ports 3100 + 8200)
-./run.sh build        # Build frontend without starting
-./run.sh stop         # Stop background dev processes
-PORT=9000 ./run.sh    # Start on a custom port
+./run.sh                           # Start in production mode (single port: 8200)
+./run.sh dev                       # Start in development mode (hot-reload, ports 3100 + 8200)
+./run.sh build                     # Build frontend without starting
+./run.sh stop                      # Stop background dev processes
+PORT=9000 ./run.sh                 # Start on a custom port
+EASYIMM_ROOT=/path/to/imm ./run.sh  # Point to a different Easy IMM workspace
 ```
 
 ### Changing the Port
@@ -257,6 +290,7 @@ PORT="${PORT:-9000}"
 
 | Module | Purpose |
 |--------|---------|
+| `paths.py` | Centralised path config -- `EASYIMM_ROOT` from env var or auto-detected parent directory |
 | `app.py` | FastAPI application, REST + WebSocket endpoints, static file serving |
 | `schema_engine.py` | Parses the Easy IMM JSON schema to generate dynamic form definitions |
 | `yaml_manager.py` | CRUD operations on `.ezi.yaml` files; merges per-domain synced data into hierarchical tree; detects legacy MOID orgs |
@@ -319,19 +353,13 @@ PORT="${PORT:-9000}"
 ### Project Structure
 
 ```
-EasyIMM-UCS-Toolkit/
+EasyIMM-UCS-Toolkit/            # Self-contained app folder
 ├── run.sh                      # One-command start script
 ├── README.md                   # This file
 ├── .gitignore
-├── domains/                    # Per-domain synced data (auto-created)
-│   └── intersight.com/         # Example: synced from intersight.com
-│       ├── organizations/
-│       ├── pools/
-│       ├── policies/
-│       ├── profiles/
-│       └── templates/
 ├── backend/
 │   ├── requirements.txt        # Python dependencies
+│   ├── paths.py                # Centralised path config (EASYIMM_ROOT)
 │   ├── app.py                  # FastAPI application
 │   ├── schema_engine.py        # Easy IMM schema parser
 │   ├── yaml_manager.py         # YAML file manager (local + domain merge)
@@ -353,6 +381,24 @@ EasyIMM-UCS-Toolkit/
 │   │   └── components/         # React components
 │   └── public/                 # Static assets
 └── redfish-workspace/          # Generated Redfish TF files (runtime)
+
+# The Easy IMM workspace (pointed to by EASYIMM_ROOT):
+your-easy-imm-repo/
+├── main.tf, variables.tf, ...  # Terraform files
+├── organizations/              # .ezi.yaml config files
+├── pools/
+├── policies/
+├── profiles/
+├── templates/
+├── yaml_schema/                # Easy IMM JSON schema
+├── domains/                    # Per-domain synced data (auto-created)
+│   └── intersight.com/
+│       ├── organizations/
+│       ├── pools/
+│       ├── policies/
+│       ├── profiles/
+│       └── templates/
+└── EasyIMM-UCS-Toolkit/        # ← app goes here (default layout)
 ```
 
 ---
