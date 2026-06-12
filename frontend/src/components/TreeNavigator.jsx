@@ -86,26 +86,79 @@ function TreeItem({ label, icon, depth = 0, children, count, onAdd, onClick, onD
 }
 
 const FRIENDLY = {
-  ip: 'IP', iqn: 'IQN', mac: 'MAC', resource: 'Resource', uuid: 'UUID', wwnn: 'WWNN', wwpn: 'WWPN',
-  adapter_configuration: 'Adapter Config', bios: 'BIOS', boot_order: 'Boot Order',
-  certificate_management: 'Certificate Mgmt', device_connector: 'Device Connector',
-  drive_security: 'Drive Security', ethernet_adapter: 'Eth Adapter', ethernet_network: 'Eth Network',
-  ethernet_network_control: 'Eth Net Control', ethernet_network_group: 'Eth Net Group',
-  ethernet_qos: 'Eth QoS', fc_zone: 'FC Zone', fibre_channel_adapter: 'FC Adapter',
-  fibre_channel_network: 'FC Network', fibre_channel_qos: 'FC QoS', firmware: 'Firmware',
-  firmware_authenticate: 'Firmware Auth', flow_control: 'Flow Control', imc_access: 'IMC Access',
-  ipmi_over_lan: 'IPMI/LAN', iscsi_adapter: 'iSCSI Adapter', iscsi_boot: 'iSCSI Boot',
-  iscsi_static_target: 'iSCSI Target', lan_connectivity: 'LAN Connectivity', ldap: 'LDAP',
-  link_aggregation: 'Link Aggregation', link_control: 'Link Control', local_user: 'Local User',
-  mac_sec: 'MACsec', memory: 'Memory', multicast: 'Multicast', network_connectivity: 'DNS',
-  ntp: 'NTP', persistent_memory: 'Persistent Memory', port: 'Port', power: 'Power',
+  ip: 'IP Pool', iqn: 'IQN Pool', mac: 'MAC Pool', resource: 'Resource Pool',
+  uuid: 'UUID Pool', wwnn: 'WWNN Pool', wwpn: 'WWPN Pool',
+  adapter_configuration: 'Adapter Configuration', bios: 'BIOS', boot_order: 'Boot Order',
+  certificate_management: 'Certificate Management', device_connector: 'Device Connector',
+  drive_security: 'Drive Security', ethernet_adapter: 'Ethernet Adapter',
+  ethernet_network: 'Ethernet Network', ethernet_network_control: 'Ethernet Network Control',
+  ethernet_network_group: 'Ethernet Network Group', ethernet_qos: 'Ethernet QoS',
+  fc_zone: 'FC Zone', fibre_channel_adapter: 'Fibre Channel Adapter',
+  fibre_channel_network: 'Fibre Channel Network', fibre_channel_qos: 'Fibre Channel QoS',
+  firmware: 'Firmware', firmware_authenticate: 'Firmware Authenticate',
+  flow_control: 'Flow Control', imc_access: 'IMC Access', ipmi_over_lan: 'IPMI Over LAN',
+  iscsi_adapter: 'iSCSI Adapter', iscsi_boot: 'iSCSI Boot',
+  iscsi_static_target: 'iSCSI Static Target', lan_connectivity: 'LAN Connectivity',
+  ldap: 'LDAP', link_aggregation: 'Link Aggregation', link_control: 'Link Control',
+  local_user: 'Local User', mac_sec: 'MACsec', memory: 'Memory', multicast: 'Multicast',
+  network_connectivity: 'Network Connectivity (DNS)', ntp: 'NTP',
+  persistent_memory: 'Persistent Memory', port: 'Port', power: 'Power',
   san_connectivity: 'SAN Connectivity', scrub: 'Scrub', sd_card: 'SD Card',
-  serial_over_lan: 'Serial/LAN', server_pool_qualification: 'Server Pool Qual',
-  smtp: 'SMTP', snmp: 'SNMP', ssh: 'SSH', storage: 'Storage', switch_control: 'Switch Control',
-  syslog: 'Syslog', system_qos: 'System QoS', thermal: 'Thermal', vhba_template: 'vHBA Template',
-  virtual_kvm: 'Virtual KVM', virtual_media: 'Virtual Media', vlan: 'VLAN',
-  vnic_template: 'vNIC Template', vsan: 'VSAN', chassis: 'Chassis', domain: 'Domain', server: 'Server',
+  serial_over_lan: 'Serial Over LAN', server_pool_qualification: 'Server Pool Qualification',
+  smtp: 'SMTP', snmp: 'SNMP', ssh: 'SSH', storage: 'Storage',
+  switch_control: 'Switch Control', syslog: 'Syslog', system_qos: 'System QoS',
+  thermal: 'Thermal', vhba_template: 'vHBA Template', virtual_kvm: 'Virtual KVM',
+  virtual_media: 'Virtual Media', vlan: 'VLAN', vnic_template: 'vNIC Template', vsan: 'VSAN',
+  chassis: 'Chassis', domain: 'Domain', server: 'Server',
 };
+
+const POLICY_BUCKETS = {
+  'Compute': ['bios', 'boot_order', 'power', 'memory', 'thermal', 'persistent_memory', 'firmware', 'firmware_authenticate'],
+  'Networking': ['ethernet_adapter', 'ethernet_network', 'ethernet_network_control', 'ethernet_network_group', 'ethernet_qos', 'lan_connectivity', 'vnic_template', 'vlan', 'multicast', 'flow_control', 'link_aggregation', 'link_control'],
+  'Storage & SAN': ['fibre_channel_adapter', 'fibre_channel_network', 'fibre_channel_qos', 'san_connectivity', 'vhba_template', 'vsan', 'fc_zone', 'storage', 'drive_security', 'sd_card', 'iscsi_adapter', 'iscsi_boot', 'iscsi_static_target'],
+  'Management': ['imc_access', 'ipmi_over_lan', 'local_user', 'ldap', 'ntp', 'snmp', 'smtp', 'ssh', 'syslog', 'serial_over_lan', 'virtual_kvm', 'virtual_media', 'device_connector', 'network_connectivity', 'certificate_management'],
+  'Infrastructure': ['adapter_configuration', 'port', 'switch_control', 'system_qos', 'mac_sec', 'server_pool_qualification', 'scrub'],
+};
+
+const BUCKET_ICONS = {
+  'Compute': <DnsIcon fontSize="small" />,
+  'Networking': <LanIcon fontSize="small" />,
+  'Storage & SAN': <StorageIcon fontSize="small" />,
+  'Management': <PolicyIcon fontSize="small" />,
+  'Infrastructure': <AccountTreeIcon fontSize="small" />,
+};
+
+const TOOLTIP_HINTS = {
+  chassis: 'Hardware chassis configuration profile',
+  domain: 'UCS domain / fabric interconnect profile',
+  server: 'Server (compute node) service profile',
+};
+
+function ResourceTypeItem({ type, resources, org, cat, depth, onSelect, onAdd, onDelete, onClone }) {
+  const isSyncedItem = (r) => r._source && r._source.startsWith('synced:');
+  const hint = TOOLTIP_HINTS[type];
+  const label = FRIENDLY[type] || type;
+  return (
+    <TreeItem
+      key={type}
+      label={hint ? <Tooltip title={hint} placement="right"><span>{label}</span></Tooltip> : label}
+      depth={depth}
+      count={resources.length}
+      onAdd={() => onAdd(org, cat, type)}
+    >
+      {resources.map((r) => (
+        <TreeItem
+          key={r.name}
+          label={r.name}
+          depth={depth + 1}
+          onClick={() => onSelect(org, cat, type, r.data)}
+          onDelete={isSyncedItem(r) ? undefined : () => onDelete(org, cat, type, r.name)}
+          onClone={() => onClone(org, cat, type, r.name)}
+        />
+      ))}
+    </TreeItem>
+  );
+}
 
 function OrgTree({ org, orgData, types, onSelect, onAdd, onDelete, onClone, depth = 0, expandedByDefault, icon, synced, displayLabel }) {
   return (
@@ -117,32 +170,49 @@ function OrgTree({ org, orgData, types, onSelect, onAdd, onDelete, onClone, dept
       {CATEGORY_ORDER.map((cat) => {
         const catTypes = types[cat] || [];
         const orgCat = orgData?.[cat] || {};
+
+        if (cat === 'policies') {
+          const typeSet = new Set(catTypes.map(t => t.type));
+          const bucketed = new Set();
+          return (
+            <TreeItem key={cat} label="Policies" icon={CATEGORY_ICONS[cat]} depth={depth + 1}>
+              {Object.entries(POLICY_BUCKETS).map(([bucket, bucketTypes]) => {
+                const visibleTypes = bucketTypes.filter(t => typeSet.has(t));
+                if (visibleTypes.length === 0) return null;
+                visibleTypes.forEach(t => bucketed.add(t));
+                const bucketCount = visibleTypes.reduce((n, t) => n + (orgCat[t]?.length || 0), 0);
+                return (
+                  <TreeItem key={bucket} label={bucket} icon={BUCKET_ICONS[bucket]} depth={depth + 2} count={bucketCount}>
+                    {visibleTypes.map((type) => (
+                      <ResourceTypeItem
+                        key={type} type={type} resources={orgCat[type] || []}
+                        org={org} cat={cat} depth={depth + 3}
+                        onSelect={onSelect} onAdd={onAdd} onDelete={onDelete} onClone={onClone}
+                      />
+                    ))}
+                  </TreeItem>
+                );
+              })}
+              {catTypes.filter(({ type }) => !bucketed.has(type)).map(({ type }) => (
+                <ResourceTypeItem
+                  key={type} type={type} resources={orgCat[type] || []}
+                  org={org} cat={cat} depth={depth + 2}
+                  onSelect={onSelect} onAdd={onAdd} onDelete={onDelete} onClone={onClone}
+                />
+              ))}
+            </TreeItem>
+          );
+        }
+
         return (
           <TreeItem key={cat} label={cat.charAt(0).toUpperCase() + cat.slice(1)} icon={CATEGORY_ICONS[cat]} depth={depth + 1}>
-            {catTypes.map(({ type }) => {
-              const resources = orgCat[type] || [];
-              const isSyncedItem = (r) => r._source && r._source.startsWith('synced:');
-              return (
-                <TreeItem
-                  key={type}
-                  label={FRIENDLY[type] || type}
-                  depth={depth + 2}
-                  count={resources.length}
-                  onAdd={() => onAdd(org, cat, type)}
-                >
-                  {resources.map((r) => (
-                    <TreeItem
-                      key={r.name}
-                      label={r.name}
-                      depth={depth + 3}
-                      onClick={() => onSelect(org, cat, type, r.data)}
-                      onDelete={isSyncedItem(r) ? undefined : () => onDelete(org, cat, type, r.name)}
-                      onClone={() => onClone(org, cat, type, r.name)}
-                    />
-                  ))}
-                </TreeItem>
-              );
-            })}
+            {catTypes.map(({ type }) => (
+              <ResourceTypeItem
+                key={type} type={type} resources={orgCat[type] || []}
+                org={org} cat={cat} depth={depth + 2}
+                onSelect={onSelect} onAdd={onAdd} onDelete={onDelete} onClone={onClone}
+              />
+            ))}
           </TreeItem>
         );
       })}

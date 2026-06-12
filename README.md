@@ -307,7 +307,7 @@ PORT="${PORT:-9000}"
 | Component | Purpose |
 |-----------|---------|
 | `App.jsx` | Main shell with tab navigation, toolbar with Sync/Unsync/Import/Export/Settings buttons |
-| `TreeNavigator.jsx` | Hierarchical tree: local orgs at top, synced domains grouped by Intersight domain → organization with MOID→name resolution |
+| `TreeNavigator.jsx` | Hierarchical tree with policy bucketing (Compute, Networking, Storage & SAN, Management, Infrastructure); clean unabbreviated labels; local orgs at top, synced domains grouped by Intersight domain → organization with MOID→name resolution |
 | `ResourcePanel.jsx` | Dynamic form editor for any Easy IMM resource |
 | `RedfishPanel.jsx` | Redfish server configuration with master-detail layout |
 | `TerraformPanel.jsx` | Real-time Terraform command runner (Easy IMM) |
@@ -410,6 +410,9 @@ your-easy-imm-repo/
 ### Easy IMM Tab
 - Organization management (create, delete, clone)
 - Dynamic form editor for 50+ resource types (pools, policies, profiles, templates)
+- **Bucketed policy tree** -- 45+ policies are organised into logical groups (Compute, Networking, Storage & SAN, Management, Infrastructure) instead of a flat list, with per-bucket resource counts
+- **Clean labels** -- full, unabbreviated names matching Intersight terminology (e.g., "Ethernet Network Control" not "Eth Net Control"; pools explicitly labelled "IP Pool", "MAC Pool", etc.)
+- **Tooltips** on profile/template sub-types (Chassis, Domain, Server) explaining their purpose
 - Schema-validated fields with dropdowns, toggles, and cross-references
 - Resource cloning across organizations
 - **Intersight Live Sync** -- pull all deployed configs into per-domain folders with one click
@@ -442,7 +445,7 @@ your-easy-imm-repo/
 - **Sync** pulls live Intersight configurations into `domains/<fqdn>/` folders
 - Each domain gets the full Easy IMM directory structure (organizations, pools, policies, profiles, templates)
 - 51 resource type mappers cover all pools, policies, profiles, and templates
-- **Hierarchical tree display**: Synced resources appear in a separate green "Synced from Intersight" section, grouped by domain name, then by organization name -- clearly separated from local configuration
+- **Hierarchical tree display**: Synced resources appear in a separate green "Synced from Intersight" section, grouped by domain name, then by organization name -- clearly separated from local configuration. Policies are bucketed into Compute, Networking, Storage & SAN, Management, and Infrastructure groups for easy navigation
 - **MOID → name resolution**: Organization MOIDs are automatically resolved to their human-readable names (e.g., `CBUCSX-CBUAL.GOV.AE (6791c3a6…)` instead of raw `6791c3a66972653001fd82ff`)
 - Local resources are never overwritten -- synced data lives in separate folders
 - **Add to synced orgs**: All four categories (Pools, Policies, Profiles, Templates) are always visible for synced organizations, with Add buttons enabled -- so you can create new resources for orgs that have no existing configuration on Intersight
