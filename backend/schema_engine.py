@@ -85,6 +85,45 @@ POLICY_REF_SUFFIXES = ("_policy", "_policies", "_pool", "_pools", "_template")
 
 SECTION_RE = re.compile(r"#\+*\n# (.+?) Section\n#\+*")
 
+_LABEL_JUNK_RE = re.compile(
+    r"\s*-\s*(?:Intersight Uri:\s*\S+|object_type:\s*\S+)", re.IGNORECASE
+)
+
+
+def _clean_label(raw_title: str, field_name: str) -> str:
+    """Strip schema jargon from titles and produce clean, human-readable labels.
+
+    Raw titles often look like:
+      'vlans - Vlans - Intersight Uri: fabric/Vlans'
+      'boot_devices - Boot Devices - object_type: boot.DeviceBase'
+      'tags - Tags'
+    """
+    cleaned = _LABEL_JUNK_RE.sub("", raw_title.replace("\n", " ")).strip()
+    if " - " in cleaned:
+        parts = [p.strip() for p in cleaned.split(" - ") if p.strip()]
+        if len(parts) >= 2 and parts[0].lower().replace("_", " ") == field_name.replace("_", " "):
+            cleaned = parts[1]
+        else:
+            cleaned = parts[-1]
+    norm = cleaned.lower().replace("_", " ")
+    if not cleaned or norm == field_name.replace("_", " "):
+        cleaned = field_name.replace("_", " ").title()
+    return cleaned
+
+
+_DESC_TRIM_RE = re.compile(
+    r"\n\s*(?:Required|Optional) Attr(?:ibute)?s?:.*", re.DOTALL | re.IGNORECASE
+)
+
+
+def _clean_description(raw: str) -> str:
+    """Keep only the first meaningful paragraph; drop attribute lists and schema notes."""
+    if not raw:
+        return ""
+    trimmed = _DESC_TRIM_RE.sub("", raw).strip()
+    lines = [ln.strip() for ln in trimmed.split("\n") if ln.strip() and not ln.strip().startswith("*")]
+    return " ".join(lines[:3]) if lines else ""
+
 
 class SchemaEngine:
     def __init__(self, schema_path: str | None = None):
@@ -131,10 +170,12 @@ class SchemaEngine:
 
     def _field_from_property(self, name: str, prop: dict, required_fields: list) -> dict:
         resolved = self._resolve_schema(prop)
+        raw_title = resolved.get("title", name.replace("_", " ").title())
+        raw_desc = resolved.get("description", "")
         field = {
             "name": name,
-            "label": resolved.get("title", name.replace("_", " ").title()),
-            "description": resolved.get("description", ""),
+            "label": _clean_label(raw_title, name),
+            "description": _clean_description(raw_desc),
             "required": name in required_fields,
             "default": resolved.get("default"),
         }
@@ -154,8 +195,13 @@ class SchemaEngine:
             field["type"] = "number"
         elif resolved.get("type") == "array":
             field["type"] = "array"
-            items = resolved.get("items", {})
-            resolved_items = self._resolve_schema(items)
+            resolved_items = self._resolve_schema(resolved.get("items", {}))
+            # Unwrap nested array-of-ref chains (e.g. tags -> array -> $ref -> object)
+            for _ in range(5):
+                if resolved_items.get("type") == "array" and "items" in resolved_items:
+                    resolved_items = self._resolve_schema(resolved_items["items"])
+                else:
+                    break
             if resolved_items.get("type") == "object":
                 field["item_fields"] = self._extract_fields(resolved_items)
             elif "enum" in resolved_items:

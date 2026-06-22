@@ -101,17 +101,30 @@ function FieldRenderer({ field, value, onChange, tree, currentOrg }) {
   if (field.type === 'array' && field.item_fields) {
     const items = Array.isArray(value) ? value : [];
     return (
-      <Box sx={{ my: 1 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+      <Box sx={{ my: 1, p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
           <Typography variant="body2" sx={{ fontWeight: 600, flex: 1 }}>{field.label}</Typography>
+          <Chip label={items.length} size="small" sx={{ mr: 1 }} />
           <IconButton size="small" onClick={() => handleChange([...items, {}])} color="secondary">
             <AddIcon fontSize="small" />
           </IconButton>
         </Box>
+        {field.description && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+            {field.description.split('\n')[0]}
+          </Typography>
+        )}
+        {items.length === 0 && (
+          <Box sx={{ py: 2, textAlign: 'center', bgcolor: 'action.hover', borderRadius: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              No entries yet. Click <b>+</b> to add one.
+            </Typography>
+          </Box>
+        )}
         {items.map((item, idx) => (
-          <Box key={idx} sx={{ pl: 2, borderLeft: '2px solid', borderColor: 'divider', mb: 1 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Typography variant="caption" color="text.secondary">#{idx + 1}</Typography>
+          <Box key={idx} sx={{ pl: 2, borderLeft: '2px solid', borderColor: 'secondary.main', mb: 1.5, pt: 0.5 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+              <Typography variant="caption" sx={{ fontWeight: 600 }}>Entry #{idx + 1}</Typography>
               <IconButton size="small" onClick={() => handleChange(items.filter((_, i) => i !== idx))} color="error">
                 <DeleteIcon sx={{ fontSize: 14 }} />
               </IconButton>
@@ -273,7 +286,14 @@ export default function ResourcePanel({ onClose, onSave, schema, initialData, or
     });
   };
 
+  const INTERSIGHT_NAME_RE = /^[a-zA-Z0-9_.:-]{1,64}$/;
+  const nameValue = formData.name || '';
+  const nameError = nameValue && !INTERSIGHT_NAME_RE.test(nameValue)
+    ? 'Only letters, numbers, dots, underscores, colons, and hyphens allowed (no spaces). Max 64 chars.'
+    : '';
+
   const handleSave = () => {
+    if (nameError) return;
     onSave(formData);
   };
 
@@ -305,7 +325,7 @@ export default function ResourcePanel({ onClose, onSave, schema, initialData, or
           variant="contained" size="small"
           startIcon={<SaveIcon />}
           onClick={handleSave}
-          disabled={!formData.name}
+          disabled={!formData.name || !!nameError}
         >
           {isEditing ? 'Save' : 'Create'}
         </Button>
@@ -316,12 +336,26 @@ export default function ResourcePanel({ onClose, onSave, schema, initialData, or
 
       {/* Scrollable form body */}
       <Box sx={{ flex: 1, overflow: 'auto', px: 2.5, py: 2 }}>
-        {formStructure.core.map((field) => (
-          <FieldRenderer
-            key={field.name} field={field} value={formData[field.name]}
-            onChange={handleFieldChange} tree={tree} currentOrg={org}
-          />
-        ))}
+        {formStructure.core.map((field) => {
+          if (field.name === 'name' && nameError) {
+            return (
+              <TextField
+                key="name" fullWidth label={field.label}
+                value={formData.name ?? field.default ?? ''}
+                onChange={(e) => handleFieldChange('name', e.target.value)}
+                helperText={nameError}
+                error
+                margin="dense" required={field.required}
+              />
+            );
+          }
+          return (
+            <FieldRenderer
+              key={field.name} field={field} value={formData[field.name]}
+              onChange={handleFieldChange} tree={tree} currentOrg={org}
+            />
+          );
+        })}
 
         {formStructure.isBios && formStructure.sections.length > 0 && (
           <Box sx={{ mt: 2 }}>
