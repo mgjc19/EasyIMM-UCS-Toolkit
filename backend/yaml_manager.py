@@ -1,9 +1,9 @@
 """
 YAML Manager -- reads/writes .ezi.yaml files in the EasyIMM project root.
 
-Also reads per-domain synced data from ``domains/<fqdn>/`` subfolders
-and merges it into the tree so users see what's deployed on each
-connected Intersight domain alongside locally-defined resources.
+Also reads per-domain synced data from ``intersight-data/<fqdn>/``
+subfolders and merges it into the tree so users see what's deployed on
+each connected Intersight domain alongside locally-defined resources.
 """
 
 import os
@@ -117,6 +117,21 @@ class YAMLManager:
         with open(path, "w") as f:
             yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
 
+    @staticmethod
+    def _enforce_required_nested(resource_type: str, resource: dict):
+        """Auto-fix known required nested fields before writing to YAML.
+
+        For VLAN entries: if a vlans child has primary_vlan_id but no
+        vlan_list, move the value to vlan_list so the Terraform module
+        doesn't choke.
+        """
+        if resource_type == "vlan" and isinstance(resource.get("vlans"), list):
+            for entry in resource["vlans"]:
+                if not isinstance(entry, dict):
+                    continue
+                if not entry.get("vlan_list") and entry.get("primary_vlan_id"):
+                    entry["vlan_list"] = str(entry["primary_vlan_id"])
+
     def _get_file_path(self, category: str, resource_type: str) -> Path:
         routing = FILE_ROUTING.get(category, {})
         rel = routing.get(resource_type)
@@ -182,14 +197,14 @@ class YAMLManager:
         self._merge_domain_trees(tree)
 
         if moid_orgs:
-            if "_synced_domains" not in tree:
-                tree["_synced_domains"] = {}
-            tree["_synced_domains"]["intersight (legacy sync)"] = moid_orgs
+            if "_intersight_data" not in tree:
+                tree["_intersight_data"] = {}
+            tree["_intersight_data"]["intersight (legacy sync)"] = moid_orgs
 
         return tree
 
     def _merge_domain_trees(self, tree: dict) -> None:
-        """Merge synced domain data into the tree under _synced_domains."""
+        """Merge synced domain data into the tree under _intersight_data."""
         if not DOMAINS_ROOT.exists():
             return
 
@@ -227,7 +242,7 @@ class YAMLManager:
                 synced_domains[domain_name] = domain_orgs
 
         if synced_domains:
-            tree["_synced_domains"] = synced_domains
+            tree["_intersight_data"] = synced_domains
 
     def get_resources(self, org: str, category: str, resource_type: str) -> list[dict]:
         model = self.get_merged_model()
@@ -239,6 +254,7 @@ class YAMLManager:
         return resources if isinstance(resources, list) else []
 
     def save_resource(self, org: str, category: str, resource_type: str, resource: dict):
+        self._enforce_required_nested(resource_type, resource)
         file_path = self._get_file_path(category, resource_type)
         data = self._read_yaml(file_path)
 

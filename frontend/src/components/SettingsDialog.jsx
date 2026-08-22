@@ -8,9 +8,11 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
+import Divider from '@mui/material/Divider';
 import CircularProgress from '@mui/material/CircularProgress';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
+import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import { api } from '../api';
 
 const API_KEY_REGEX = /^[\da-f]{24}\/[\da-f]{24}\/[\da-f]{24}$/;
@@ -19,6 +21,7 @@ export default function SettingsDialog({ open, onClose }) {
   const [settings, setSettings] = useState({ api_key_id: '', secret_key: '', intersight_fqdn: 'intersight.com' });
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const [message, setMessage] = useState(null);
   const [keyError, setKeyError] = useState('');
 
@@ -65,6 +68,18 @@ export default function SettingsDialog({ open, onClose }) {
     setTesting(false);
   };
 
+  const handleClear = async () => {
+    setClearing(true);
+    try {
+      await api.clearSettings();
+      setSettings({ api_key_id: '', secret_key: '', intersight_fqdn: 'intersight.com' });
+      setMessage({ type: 'success', text: 'Connection credentials cleared' });
+    } catch (e) {
+      setMessage({ type: 'error', text: e.message });
+    }
+    setClearing(false);
+  };
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>Intersight Settings</DialogTitle>
@@ -96,6 +111,23 @@ export default function SettingsDialog({ open, onClose }) {
           onChange={(e) => setSettings({ ...settings, intersight_fqdn: e.target.value })}
           helperText="Use intersight.com for SaaS, or your CVA/PVA hostname"
         />
+
+        <Divider sx={{ my: 2 }} />
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Button
+            color="error"
+            variant="outlined"
+            size="small"
+            startIcon={clearing ? <CircularProgress size={14} /> : <DeleteForeverIcon />}
+            onClick={handleClear}
+            disabled={clearing}
+          >
+            Clear Connection
+          </Button>
+          <Typography variant="caption" color="text.secondary">
+            Remove saved credentials from env.sh
+          </Typography>
+        </Box>
 
         {message && (
           <Alert

@@ -83,6 +83,10 @@ FRIENDLY_NAMES = {
 
 POLICY_REF_SUFFIXES = ("_policy", "_policies", "_pool", "_pools", "_template")
 
+REQUIRED_FIELD_OVERRIDES: dict[str, list[str]] = {
+    "vlans": ["vlan_list"],
+}
+
 SECTION_RE = re.compile(r"#\+*\n# (.+?) Section\n#\+*")
 
 _LABEL_JUNK_RE = re.compile(
@@ -203,7 +207,7 @@ class SchemaEngine:
                 else:
                     break
             if resolved_items.get("type") == "object":
-                field["item_fields"] = self._extract_fields(resolved_items)
+                field["item_fields"] = self._extract_fields(resolved_items, parent_key=name)
             elif "enum" in resolved_items:
                 field["item_type"] = "select"
                 field["options"] = resolved_items["enum"]
@@ -211,7 +215,7 @@ class SchemaEngine:
                 field["item_type"] = resolved_items.get("type", "string")
         elif resolved.get("type") == "object":
             field["type"] = "object"
-            field["fields"] = self._extract_fields(resolved)
+            field["fields"] = self._extract_fields(resolved, parent_key=name)
         else:
             field["type"] = "string"
             if resolved.get("pattern"):
@@ -229,9 +233,13 @@ class SchemaEngine:
 
         return field
 
-    def _extract_fields(self, schema: dict) -> list:
+    def _extract_fields(self, schema: dict, parent_key: str = "") -> list:
         props = schema.get("properties", {})
-        required = schema.get("required", [])
+        required = list(schema.get("required", []))
+        overrides = REQUIRED_FIELD_OVERRIDES.get(parent_key, [])
+        for f in overrides:
+            if f not in required:
+                required.append(f)
         fields = []
         for name, prop in props.items():
             fields.append(self._field_from_property(name, prop, required))

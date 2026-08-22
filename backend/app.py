@@ -22,7 +22,7 @@ from fastapi.responses import FileResponse, Response
 from schema_engine import SchemaEngine
 from yaml_manager import YAMLManager
 from terraform_runner import TerraformRunner
-from paths import EASYIMM_ROOT
+from paths import EASYIMM_ROOT, INTERSIGHT_DATA_ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -243,6 +243,13 @@ async def test_connection():
 
 # ── Terraform endpoints ──
 
+@app.post("/api/terraform/validate-config")
+def validate_terraform_config():
+    """Pre-flight check: scan YAML files for unresolved cross-policy references."""
+    from config_validator import validate_config
+    return validate_config(yaml_mgr)
+
+
 @app.post("/api/terraform/{action}")
 async def run_terraform(action: str):
     valid_actions = ("init", "validate", "plan", "apply", "destroy", "state_list")
@@ -260,7 +267,8 @@ async def ws_terraform(websocket: WebSocket):
             msg = await websocket.receive_text()
             data = json.loads(msg)
             action = data.get("action")
-            valid_actions = ("init", "validate", "plan", "apply", "destroy", "state_list")
+            targets = data.get("targets")
+            valid_actions = ("init", "validate", "plan", "apply", "apply_plan", "destroy", "state_list")
             if action not in valid_actions:
                 await websocket.send_json({"type": "error", "data": f"Invalid: {action}"})
                 continue
@@ -269,7 +277,7 @@ async def ws_terraform(websocket: WebSocket):
                 await websocket.send_json({"type": "output", "data": line})
 
             await websocket.send_json({"type": "start", "action": action})
-            result = await tf_runner.run(action, callback=send_line)
+            result = await tf_runner.run(action, callback=send_line, targets=targets)
             await websocket.send_json({
                 "type": "done",
                 "success": result["success"],
@@ -434,6 +442,31 @@ def unsync_domain(domain_name: str):
     if not result.get("ok"):
         raise HTTPException(404, result.get("error", "Unsync failed"))
     return result
+
+
+@app.delete("/api/sync/all")
+def unsync_all():
+    """Remove ALL synced Intersight domain data."""
+    import shutil
+    removed = []
+    if INTERSIGHT_DATA_ROOT.exists():
+        for d in list(INTERSIGHT_DATA_ROOT.iterdir()):
+            if d.is_dir():
+                shutil.rmtree(d)
+                removed.append(d.name)
+            elif d.name != ".DS_Store":
+                d.unlink(missing_ok=True)
+                removed.append(d.name)
+    return {"ok": True, "removed": removed}
+
+
+@app.delete("/api/settings")
+def clear_settings():
+    """Remove saved Intersight credentials (env.sh)."""
+    env_path = EASYIMM_ROOT / "env.sh"
+    if env_path.exists():
+        env_path.unlink()
+    return {"ok": True, "message": "Credentials cleared"}
 
 
 # ── Import from local Easy IMM workspace ──
@@ -613,6 +646,67 @@ async def ws_redfish_terraform(websocket: WebSocket):
         pass
 
 
+# ── Full-state export ──
+
+
+def _dict_to_xml(data, root_tag="easyimm"):
+    """Convert a nested dict/list structure to an XML string."""
+    from xml.etree.ElementTree import Element, SubElement, tostring
+    from xml.dom.minidom import parseString
+
+    def _add_children(parent, obj):
+        if isinstance(obj, dict):
+            for key, value in obj.items():
+                tag = re.sub(r"[^a-zA-Z0-9_.\-]", "_", str(key))
+                if isinstance(value, list):
+                    for item in value:
+                        child = SubElement(parent, tag)
+                        _add_children(child, item)
+                elif isinstance(value, dict):
+                    child = SubElement(parent, tag)
+                    _add_children(child, value)
+                else:
+                    child = SubElement(parent, tag)
+                    child.text = str(value) if value is not None else ""
+        elif isinstance(obj, list):
+            for item in obj:
+                child = SubElement(parent, "item")
+                _add_children(child, item)
+        else:
+            parent.text = str(obj) if obj is not None else ""
+
+    root = Element(root_tag)
+    _add_children(root, data)
+    raw = tostring(root, encoding="unicode", xml_declaration=True)
+    return parseString(raw).toprettyxml(indent="  ")
+
+
+@app.get("/api/export/full-state")
+def export_full_state():
+    """Export the entire merged config as a single downloadable YAML file."""
+    model = yaml_mgr.get_merged_model()
+    model.pop("global_settings", None)
+    content = pyyaml.dump(model, default_flow_style=False, sort_keys=False, allow_unicode=True)
+    return Response(
+        content=content,
+        media_type="application/x-yaml",
+        headers={"Content-Disposition": "attachment; filename=full-state.ezi.yaml"},
+    )
+
+
+@app.get("/api/export/full-state-xml")
+def export_full_state_xml():
+    """Export the entire merged config as a single downloadable XML file."""
+    model = yaml_mgr.get_merged_model()
+    model.pop("global_settings", None)
+    content = _dict_to_xml(model)
+    return Response(
+        content=content,
+        media_type="application/xml",
+        headers={"Content-Disposition": "attachment; filename=full-state.xml"},
+    )
+
+
 # ── Document-as-Code export endpoints ──
 
 
@@ -650,6 +744,13 @@ def preview_tech_shared():
 def preview_tech_ucs():
     """Preview data.tech-ucs.yaml content as JSON."""
     return docascode_exporter.export_tech_ucs()
+
+
+# ── Mount Intersight Visualiser sub-app ──
+
+from visualiser.main import app as visualiser_app  # noqa: E402
+
+app.mount("/visualiser", visualiser_app, name="visualiser")
 
 
 # ── Serve built frontend (SPA) ──

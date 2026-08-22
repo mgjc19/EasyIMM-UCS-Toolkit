@@ -16,11 +16,64 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import CloseIcon from '@mui/icons-material/Close';
 import SaveIcon from '@mui/icons-material/Save';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import InputAdornment from '@mui/material/InputAdornment';
 import SearchIcon from '@mui/icons-material/Search';
 import Autocomplete from '@mui/material/Autocomplete';
 import Divider from '@mui/material/Divider';
+import Tooltip from '@mui/material/Tooltip';
+import Menu from '@mui/material/Menu';
+import ListItemIcon from '@mui/material/ListItemIcon';
+import ListItemText from '@mui/material/ListItemText';
+import CodeIcon from '@mui/icons-material/Code';
+import DataObjectIcon from '@mui/icons-material/DataObject';
+import { dump as yamlDump } from 'js-yaml';
 import { buildFormSections, getAllResourceNamesForRef } from '../utils/formBuilder';
+
+function objectToXml(obj, rootTag = 'easyimm', indent = 0) {
+  const pad = '  '.repeat(indent);
+  let xml = '';
+
+  const escape = (s) =>
+    String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+  const convert = (key, value, depth) => {
+    const p = '  '.repeat(depth);
+    const tag = key.replace(/[^a-zA-Z0-9_.-]/g, '_');
+
+    if (value === null || value === undefined) return '';
+
+    if (Array.isArray(value)) {
+      return value
+        .map((item) => {
+          if (typeof item === 'object' && item !== null) {
+            const inner = Object.entries(item)
+              .map(([k, v]) => convert(k, v, depth + 1))
+              .join('');
+            return `${p}<${tag}>\n${inner}${p}</${tag}>\n`;
+          }
+          return `${p}<${tag}>${escape(item)}</${tag}>\n`;
+        })
+        .join('');
+    }
+
+    if (typeof value === 'object') {
+      const inner = Object.entries(value)
+        .map(([k, v]) => convert(k, v, depth + 1))
+        .join('');
+      return `${p}<${tag}>\n${inner}${p}</${tag}>\n`;
+    }
+
+    return `${p}<${tag}>${escape(value)}</${tag}>\n`;
+  };
+
+  xml += `${pad}<${rootTag}>\n`;
+  Object.entries(obj).forEach(([k, v]) => {
+    xml += convert(k, v, indent + 1);
+  });
+  xml += `${pad}</${rootTag}>\n`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n${xml}`;
+}
 
 function FieldRenderer({ field, value, onChange, tree, currentOrg }) {
   const handleChange = (val) => onChange(field.name, val);
@@ -261,6 +314,7 @@ function BiosSectionGroup({ section, formData, onFieldChange, search, tree, curr
 export default function ResourcePanel({ onClose, onSave, schema, initialData, org, category, resourceType, tree }) {
   const [formData, setFormData] = useState({});
   const [search, setSearch] = useState('');
+  const [downloadAnchor, setDownloadAnchor] = useState(null);
 
   useEffect(() => {
     setFormData(initialData || {});
@@ -297,6 +351,40 @@ export default function ResourcePanel({ onClose, onSave, schema, initialData, or
     onSave(formData);
   };
 
+  const getCleanDoc = () => {
+    const cleanData = { ...formData };
+    Object.keys(cleanData).forEach((k) => {
+      if (cleanData[k] === undefined || cleanData[k] === null || cleanData[k] === '') {
+        delete cleanData[k];
+      }
+    });
+    return { doc: { [org]: { [category]: { [resourceType]: [cleanData] } } }, cleanData };
+  };
+
+  const triggerDownload = (content, filename, mimeType) => {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportYaml = () => {
+    const { doc, cleanData } = getCleanDoc();
+    const yamlStr = yamlDump(doc, { lineWidth: 120, noRefs: true, sortKeys: false });
+    triggerDownload(yamlStr, `${resourceType}_${cleanData.name || 'resource'}.ezi.yaml`, 'application/x-yaml');
+    setDownloadAnchor(null);
+  };
+
+  const handleExportXml = () => {
+    const { doc, cleanData } = getCleanDoc();
+    const xmlStr = objectToXml(doc, 'easyimm');
+    triggerDownload(xmlStr, `${resourceType}_${cleanData.name || 'resource'}.xml`, 'application/xml');
+    setDownloadAnchor(null);
+  };
+
   const isEditing = !!initialData;
 
   return (
@@ -321,6 +409,29 @@ export default function ResourcePanel({ onClose, onSave, schema, initialData, or
             {org} / {category} / {resourceType}
           </Typography>
         </Box>
+        <Tooltip title="Export this resource">
+          <span>
+            <IconButton size="small" onClick={(e) => setDownloadAnchor(e.currentTarget)} disabled={!formData.name}>
+              <FileDownloadIcon fontSize="small" />
+            </IconButton>
+          </span>
+        </Tooltip>
+        <Menu
+          anchorEl={downloadAnchor}
+          open={Boolean(downloadAnchor)}
+          onClose={() => setDownloadAnchor(null)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+          transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        >
+          <MenuItem onClick={handleExportYaml}>
+            <ListItemIcon><DataObjectIcon fontSize="small" /></ListItemIcon>
+            <ListItemText>Download as YAML</ListItemText>
+          </MenuItem>
+          <MenuItem onClick={handleExportXml}>
+            <ListItemIcon><CodeIcon fontSize="small" /></ListItemIcon>
+            <ListItemText>Download as XML</ListItemText>
+          </MenuItem>
+        </Menu>
         <Button
           variant="contained" size="small"
           startIcon={<SaveIcon />}

@@ -6,9 +6,9 @@ Pulls full resource bodies from Intersight via the SDK, maps them through
 files so the Easy IMM tree reflects what is actually deployed.
 
 Each connected Intersight domain gets its own folder under
-``<EASYIMM_ROOT>/domains/<fqdn>/`` with the standard Easy IMM directory
-layout (``organizations/``, ``pools/``, ``policies/``, ``profiles/``,
-``templates/``).
+``<EASYIMM_ROOT>/intersight-data/<fqdn>/`` with the standard Easy IMM
+directory layout (``organizations/``, ``pools/``, ``policies/``,
+``profiles/``, ``templates/``).
 """
 
 import logging

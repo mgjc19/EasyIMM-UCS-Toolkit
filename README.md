@@ -1,18 +1,20 @@
 # EasyIMM UCS Toolkit
 
-A unified web-based configuration tool for Cisco UCS infrastructure. Manage Intersight Managed Mode (IMM) policies, Redfish bare-metal servers, and export documentation -- all from a single interface with built-in Terraform IaC deployment.
+A unified web-based configuration tool for Cisco UCS infrastructure. Manage Intersight Managed Mode (IMM) policies, Redfish bare-metal servers, and visualise/audit techsupport data — all from a single interface with built-in Terraform IaC deployment.
 
 ---
 
 ## What Is This?
 
-EasyIMM UCS Toolkit is a browser-based application that provides a visual interface for configuring Cisco UCS infrastructure. It wraps two powerful Terraform ecosystems into one tool:
+EasyIMM UCS Toolkit is a browser-based application that provides a visual interface for configuring and auditing Cisco UCS infrastructure. It combines three powerful capabilities into one tool:
 
-- **Easy IMM** -- The community [Easy IMM](https://github.com/terraform-cisco-modules/easy-imm) Terraform module framework for Cisco Intersight Managed Mode. Manage organizations, pools, policies, profiles, and templates through interactive forms instead of editing YAML files manually.
+- **Easy IMM** (Tab 1) — The community [Easy IMM](https://github.com/terraform-cisco-modules/easy-imm) Terraform module framework for Cisco Intersight Managed Mode. Manage organizations, pools, policies, profiles, and templates through interactive forms instead of editing YAML files manually. Includes live sync from Intersight, per-organisation downloads (YAML/XML), and site detail views.
 
-- **Redfish** -- Comprehensive bare-metal server management via the Redfish API (e.g., Cisco C885A AI infrastructure nodes). 27 resource types covering BIOS (50+ tokens), boot order, power, storage/RAID, firmware updates, user accounts, BMC networking, certificates, KVM, SNMP, syslog, and more. Push changes directly to the BMC or use Terraform for state-managed IaC deployments. **Live state sync** reads the current configuration from the BMC so you can see what's deployed before making changes.
+- **Redfish** (Tab 2) — Comprehensive bare-metal server management via the Redfish API (e.g., Cisco C885A AI infrastructure nodes). 27 resource types covering BIOS (50+ tokens), boot order, power, storage/RAID, firmware updates, user accounts, BMC networking, certificates, KVM, SNMP, syslog, and more. Push changes directly to the BMC or use Terraform for state-managed IaC deployments. **Live state sync** reads the current configuration from the BMC so you can see what's deployed before making changes.
 
-Both tabs include integrated Terraform runners that let you validate, plan, apply, and destroy infrastructure directly from the browser. The Redfish provider is synced with the battle-tested [ai-pods](https://github.com/cisco/ai-pods) `cisco/redfish` v1.0.1 provider configuration, including session auth, retry/timeout settings, orchestrated reboots, and RAID volume management.
+- **Intersight Visualiser** (Tab 3) — Upload UCS techsupport bundles (tar.gz, JSON, XML) or connect to the Intersight API to visualise the full infrastructure hierarchy — Fabric Interconnects, chassis, servers, VLANs/VSANs, service profiles, policies, and pools. Includes a **Best Practices Audit** engine (43 rules covering operational best practices and security hardening) with exportable reports (Word .docx and HTML). Supports three data modes: live Intersight API, offline techsupport, and hybrid.
+
+Both the Easy IMM and Redfish tabs include integrated Terraform runners that let you validate, plan, apply, and destroy infrastructure directly from the browser. The Redfish provider is synced with the battle-tested [ai-pods](https://github.com/cisco/ai-pods) `cisco/redfish` v1.0.1 provider configuration.
 
 ---
 
@@ -20,20 +22,105 @@ Both tabs include integrated Terraform runners that let you validate, plan, appl
 
 Configuring Cisco UCS infrastructure today requires:
 
-1. **Deep Terraform/YAML knowledge** -- Easy IMM uses complex nested YAML schemas. A single typo can break an entire plan.
-2. **Multiple disconnected tools** -- Intersight portal for cloud-managed servers, manual Redfish API calls for bare-metal, separate Terraform workspaces for each.
-3. **No visual validation** -- You only discover errors at `terraform plan` time, often after editing dozens of files.
-4. **Documentation gap** -- Design documents get out of sync with actual deployed configuration.
-5. **No visibility into what's already deployed** -- When building new configurations, you can't see what already exists on Intersight without switching to the portal.
+1. **Deep Terraform/YAML knowledge** — Easy IMM uses complex nested YAML schemas. A single typo can break an entire plan.
+2. **Multiple disconnected tools** — Intersight portal for cloud-managed servers, manual Redfish API calls for bare-metal, separate Terraform workspaces for each.
+3. **No visual validation** — You only discover errors at `terraform plan` time, often after editing dozens of files.
+4. **Documentation gap** — Design documents get out of sync with actual deployed configuration.
+5. **No visibility into what's already deployed** — When building new configurations, you can't see what already exists on Intersight without switching to the portal.
+6. **No quick audit capability** — Verifying your UCS configuration against Cisco best practices requires manual review of dozens of policies.
 
 This toolkit solves all of these:
 
-- **Visual forms with schema validation** -- Every field is rendered with the correct input type, default values, and validation rules derived from the Easy IMM JSON schema.
-- **Unified interface** -- One tool for both Intersight-managed and Redfish-managed infrastructure.
-- **Live Terraform integration** -- Init, plan, apply, and destroy from the UI with real-time streaming output.
-- **Intersight Live Sync** -- Pull existing configurations from your Intersight domain into per-domain folders. See what's deployed while building new resources.
-- **Unsync** -- Remove synced domain data when no longer needed, keeping your workspace clean.
-- **CiscoIQ Doc-as-Code export** -- Generate `data.tech-shared.yaml` and `data.tech-ucs.yaml` files that can be imported into the CiscoIQ platform for automated documentation.
+- **Visual forms with schema validation** — Every field is rendered with the correct input type, default values, and validation rules derived from the Easy IMM JSON schema.
+- **Unified interface** — One tool for Intersight-managed, Redfish-managed, and techsupport-based infrastructure.
+- **Live Terraform integration** — Init, plan, apply, and destroy from the UI with real-time streaming output.
+- **Intersight Live Sync** — Pull existing configurations from your Intersight domain into per-domain folders. See what's deployed while building new resources.
+- **Best Practices Audit** — Upload a techsupport bundle and get an instant audit against 43 Cisco best-practice and security-hardening rules, with exportable reports.
+- **CiscoIQ Doc-as-Code export** — Generate `data.tech-shared.yaml` and `data.tech-ucs.yaml` files for automated documentation.
+- **Download as YAML or XML** — Export individual resources, organisations, or the full state in either format.
+
+---
+
+## Tabs Overview
+
+### Tab 1: Easy IMM Configuration
+
+The primary configuration tab for managing Cisco Intersight Managed Mode infrastructure.
+
+**Capabilities:**
+- Organisation management (create, delete, clone)
+- Dynamic form editor for 50+ resource types (pools, policies, profiles, templates)
+- Bucketed policy tree — 45+ policies organised into logical groups (Compute, Networking, Storage & SAN, Management, Infrastructure) with per-bucket resource counts
+- Clean labels matching Intersight terminology
+- Schema-validated fields with dropdowns, toggles, and cross-references
+- Resource cloning across organisations
+- **Site Detail Panel** — Click any organisation in the tree to see a summary of all its resources (counts by category, detailed type breakdown, resource table)
+- **Download per-organisation** — Export any org's data as YAML or XML from the tree or site detail panel
+- **Full-state export** — Download the entire merged configuration as YAML or XML
+- Intersight Live Sync (pull deployed configs into per-domain folders)
+- Unsync — remove all synced domain data and clear API credentials
+- Import from local workspace — point to any existing Easy IMM folder
+- Import from Intersight (browse mode)
+- Terraform Init / Validate / Plan / Apply / Destroy with live output
+
+### Tab 2: Redfish Bare-Metal Configuration
+
+Direct management of bare-metal servers via the Redfish API.
+
+**Capabilities:**
+- BMC connection management (endpoint, credentials, TLS)
+- **27 configurable resource types** covering the full Redfish object model:
+  - **Compute**: BIOS (50+ C885A tokens), BIOS Reset, Boot Order, Power State, Identify LED
+  - **BMC Management**: BMC Settings, BMC Network Protocol, BMC Ethernet Interface, NTP Configuration
+  - **Access & Security**: User Accounts, Account Service (lockout policies), Session Service, Secure Boot, Certificate Management
+  - **Hardware**: Chassis Thermal (read-only sensors), Chassis Power (power capping), Storage Controllers (RAID), System Inventory (read-only)
+  - **Firmware**: Firmware Update (BMC/BIOS/GPU/NIC/CPLD via UpdateService)
+  - **Monitoring**: Remote Syslog, SNMP Configuration, SMTP Email Alerts, Event Subscriptions, Log Service
+  - **Console**: KVM Configuration, Virtual Media
+  - **Actions**: BMC Reset (graceful/force restart)
+- BIOS configuration grouped by category: I/O, Server Management, Security, Memory, Processor, Power/Performance
+- Enable/disable individual resources
+- **Live state sync** — read current BMC config with one click
+- **Two deployment methods:**
+  - **Direct Push** — PATCH/POST directly to BMC Redfish API (instant, no Terraform)
+  - **Terraform IaC** — Generate `.tf` files, plan, and apply with state management
+
+### Tab 3: Intersight Visualiser & Audit
+
+Upload techsupport bundles or connect to the Intersight API to visualise and audit your UCS infrastructure.
+
+**Capabilities:**
+- **Three data source modes:**
+  - **Intersight API** — Connect with API key to visualise live policies and profiles
+  - **Techsupport upload** — Parse one or more UCS techsupport bundles (.tar.gz, .tgz, .tar, .zip, .gz, .json.gz, .json, .xml)
+  - **Hybrid** — Combine techsupport (physical view) with live API (logical view)
+- **Hierarchical visualisation** with D3.js interactive tree:
+  - Organisations → Infrastructure (FIs, Chassis, Rack Servers) → Profiles → Policies → Pools
+  - Physical view, Logical view, Errors view, and Topology view
+- **Best Practices Audit** — 22 operational rules derived from the Cisco Intersight Best Practices Configuration Guide:
+  - General: Profile Templates, Domain Profiles
+  - Storage: M.2 RAID1 Boot
+  - FC/SAN: VSAN reservations, QoS data field, WWPN pool separation, vHBA redundancy, port-channels
+  - Ethernet/LAN: Jumbo MTU, separate storage VLANs, RoCE failover, disjoint VLANs
+  - NVMe: FC SCSI queues, TCP RX queues
+  - QoS: RoCEv2 Platinum configuration
+  - BIOS: VMD, IOMMU
+  - iSCSI: Static IQN, MTU 9000
+  - Adapter: RoCEv2 adapter policies, queue parameters
+  - Firmware: Consistent FI firmware
+- **Security Hardening Audit** — 21 rules from the Cisco Compute Intersight Hardening Guide:
+  - Secure Boot, TPM 2.0
+  - Strong passwords, Local User policy, LDAP
+  - NTP, DNS, SSH policies
+  - Syslog, SNMP monitoring
+  - IPMI, KVM encryption, Serial over LAN
+  - SED encryption, Certificate management
+  - Firmware policies, USB port control, Device Connector
+- **Custom rules** — Add your own audit rules with field/value matching
+- **Export reports** — Download audit results as Word (.docx) or HTML with customer/project metadata
+- **Search** — Filter the hierarchy tree by keyword
+- **Expand/Collapse all** — Quick navigation controls
+- **JSON export** — Export the full parsed hierarchy
 
 ---
 
@@ -42,98 +129,53 @@ This toolkit solves all of these:
 ### Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                   Browser (React + MUI)              │
-│  ┌──────────────┐  ┌──────────────┐  ┌───────────┐  │
-│  │  Easy IMM    │  │  Redfish     │  │  Export /  │  │
-│  │  Config Tab  │  │  Config Tab  │  │  Import    │  │
-│  └──────┬───────┘  └──────┬───────┘  └─────┬─────┘  │
-└─────────┼─────────────────┼────────────────┼────────┘
-          │  REST + WebSocket               │
-┌─────────┼─────────────────┼────────────────┼────────┐
-│         ▼                 ▼                ▼         │
-│  ┌─────────────────────────────────────────────┐     │
-│  │            FastAPI Backend (Python)          │     │
-│  │                                             │     │
-│  │  schema_engine.py   Parse easy-imm.json     │     │
-│  │  yaml_manager.py    Read/write .ezi.yaml    │     │
-│  │  terraform_runner   Stream TF commands      │     │
-│  │  redfish_manager    Redfish TF generation   │     │
-│  │  intersight_client  Intersight SDK import   │     │
-│  │  intersight_sync    Live sync engine        │     │
-│  │  intersight_mapper  API→YAML field mappers  │     │
-│  │  docascode_exporter CiscoIQ YAML export     │     │
-│  └──────────────┬──────────────────┬───────────┘     │
-│                 │                  │                  │
-│  ┌──────────────▼──┐  ┌───────────▼──────────┐      │
-│  │  Easy IMM Root  │  │  Redfish Workspace   │      │
-│  │  .ezi.yaml      │  │  .tf / .tfvars       │      │
-│  │  Terraform HCL  │  │  config.json         │      │
-│  │  domains/<fqdn> │  │                      │      │
-│  └────────┬────────┘  └──────────┬───────────┘      │
-│           │                      │                   │
-│           ▼                      ▼                   │
-│     terraform plan/apply   terraform plan/apply      │
-│           │                      │                   │
-│           ▼                      ▼                   │
-│    Cisco Intersight API    Redfish BMC API            │
-└──────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────┐
+│                     Browser (React + MUI)                          │
+│  ┌──────────────┐  ┌──────────────┐  ┌────────────────────────┐  │
+│  │  Easy IMM    │  │  Redfish     │  │  Intersight Visualiser │  │
+│  │  Config Tab  │  │  Config Tab  │  │  (iframe → /visualiser)│  │
+│  └──────┬───────┘  └──────┬───────┘  └──────────┬─────────────┘  │
+└─────────┼─────────────────┼──────────────────────┼────────────────┘
+          │  REST + WebSocket                      │  REST
+┌─────────┼─────────────────┼──────────────────────┼────────────────┐
+│         ▼                 ▼                      ▼                 │
+│  ┌──────────────────────────────────┐  ┌──────────────────────┐   │
+│  │   FastAPI Main App (port 8200)   │  │ Visualiser Sub-App   │   │
+│  │                                  │  │ (mounted /visualiser) │   │
+│  │  schema_engine   yaml_manager    │  │                      │   │
+│  │  terraform_runner  redfish_mgr   │  │  techsupport_parser  │   │
+│  │  intersight_sync  intersight_map │  │  best_practices      │   │
+│  │  docascode_exporter              │  │  data_collector      │   │
+│  └──────────────┬───────────────────┘  │  intersight_client   │   │
+│                 │                       └──────────┬───────────┘   │
+│  ┌──────────────▼──┐  ┌──────────────────┐        │               │
+│  │  Easy IMM Root  │  │ Redfish Workspace│        ▼               │
+│  │  .ezi.yaml      │  │ .tf / .tfvars    │  Parsed MO data       │
+│  │  domains/<fqdn> │  │ config.json      │  (in-memory)          │
+│  └────────┬────────┘  └────────┬─────────┘                       │
+│           │                    │                                   │
+│           ▼                    ▼                                   │
+│     terraform plan/apply  terraform plan/apply                    │
+│           │                    │                                   │
+│           ▼                    ▼                                   │
+│    Cisco Intersight API   Redfish BMC API                         │
+└───────────────────────────────────────────────────────────────────┘
 ```
 
 ### Data Flow
 
 1. **Easy IMM tab**: The UI reads the Easy IMM JSON schema (`easy-imm.json`) to dynamically generate forms. When you edit and save a resource, the backend writes `.ezi.yaml` files to the Easy IMM Terraform root. Clicking Plan/Apply runs `terraform plan/apply` in that root directory.
 
-2. **Redfish tab**: The UI presents configuration forms for 27 Redfish resource types (BIOS with 50+ C885A-specific tokens, boot order, power, storage/RAID, firmware, user accounts, BMC networking, certificates, KVM, SNMP, syslog, and more). Three interaction modes:
-   - **Live Sync**: Click the cloud-sync icon to read the current live state from the BMC. Each resource shows a "Live BMC State Available" banner with a "Load Live Values" button to populate the form with actual server values.
-   - **Direct Push**: Sends REST API calls (PATCH/POST) directly to the BMC Redfish endpoints -- instant, no Terraform required.
-   - **Terraform IaC**: Clicks "Generate TF" to create Terraform files (`provider.tf`, `variables.tf`, `main.tf`, `terraform.tfvars`) in the Redfish workspace. Then Init/Plan/Apply deploys via the `ciscodevnet/redfish` Terraform provider with full state management.
+2. **Redfish tab**: The UI presents configuration forms for 27 Redfish resource types. Three interaction modes:
+   - **Live Sync**: Read the current live state from the BMC.
+   - **Direct Push**: PATCH/POST directly to the BMC Redfish endpoints.
+   - **Terraform IaC**: Generate Terraform files and deploy via the `ciscodevnet/redfish` provider.
 
-3. **Intersight Live Sync**: Connects to Intersight via the official Python SDK, fetches full resource objects for all 50+ resource types, maps Intersight API fields to Easy IMM YAML format, and writes the results into per-domain folders (`domains/<fqdn>/`). Organization MOIDs are resolved to their actual names before saving. The tree displays synced resources in a dedicated **"Synced from Intersight"** section, grouped by domain and then by organization -- clearly separated from your local configuration.
+3. **Visualiser tab**: The Intersight Visualiser runs as a FastAPI sub-application mounted at `/visualiser`. It accepts techsupport bundle uploads or Intersight API connections, parses the data into a MO (Managed Object) hierarchy, and renders it as an interactive D3.js tree. The Best Practices Audit engine runs check functions against the parsed MO data.
 
-4. **Unsync**: Removes a domain folder and all its synced data, instantly cleaning the tree of that domain's resources. Also handles legacy synced data (MOID-named organizations stored in the main YAML files from older syncs).
+4. **Intersight Live Sync**: Connects to Intersight via the official Python SDK, fetches full resource objects for all 50+ resource types, maps Intersight API fields to Easy IMM YAML format, and writes the results into per-domain folders (`domains/<fqdn>/`).
 
-5. **Import (browse)**: Lighter-weight alternative to sync -- connects to Intersight to list resources without writing files. Useful for quick exploration.
-
-6. **Export**: Maps both Easy IMM and Redfish configurations into CiscoIQ Document-as-Code YAML format for automated documentation generation.
-
-### Per-Domain Folder Structure
-
-When you sync from an Intersight domain, the toolkit creates a folder under `domains/` named after the domain FQDN. This folder mirrors the standard Easy IMM directory layout:
-
-```
-domains/
-└── intersight.com/
-    ├── organizations/
-    │   └── organizations.ezi.yaml
-    ├── pools/
-    │   └── pools.ezi.yaml
-    ├── policies/
-    │   ├── compute.ezi.yaml
-    │   ├── management.ezi.yaml
-    │   ├── domain.ezi.yaml
-    │   ├── ethernet.ezi.yaml
-    │   ├── fibre_channel.ezi.yaml
-    │   ├── lan_connectivity.ezi.yaml
-    │   ├── san_connectivity.ezi.yaml
-    │   ├── environment.ezi.yaml
-    │   ├── storage.ezi.yaml
-    │   ├── vlan.ezi.yaml
-    │   ├── vsan.ezi.yaml
-    │   └── port.ezi.yaml
-    ├── profiles/
-    │   ├── server.ezi.yaml
-    │   ├── domain.ezi.yaml
-    │   └── chassis.ezi.yaml
-    └── templates/
-        └── server.ezi.yaml
-```
-
-Each domain folder is independently managed:
-- **Sync** pulls the latest configs from Intersight and writes/updates the files
-- **Unsync** deletes the entire domain folder
-- **Multiple domains** are supported simultaneously -- each gets its own folder
-- **No conflict with local files** -- synced resources are merged into the tree view but stored separately from your local `.ezi.yaml` files
+5. **Export**: Maps configurations into CiscoIQ Document-as-Code YAML format, or downloads as YAML/XML at the resource, organisation, or full-state level.
 
 ---
 
@@ -165,9 +207,9 @@ cd EasyIMM-UCS-Toolkit
 
 That's it. The `run.sh` script automatically:
 - Detects and validates your Python installation
-- Creates a virtual environment and installs dependencies
+- Creates a virtual environment and installs all dependencies (including Visualiser)
 - Builds the frontend if not already built
-- Starts the server on port 8200
+- Starts the server on port 8200 (serves everything: main app + visualiser)
 
 ### Connecting to Your Easy IMM Workspace
 
@@ -193,16 +235,9 @@ If your app folder is somewhere else, point it to the Easy IMM workspace:
 EASYIMM_ROOT=/path/to/your/easy-imm ./run.sh
 ```
 
-Or export it in your shell profile for persistence:
-
-```bash
-export EASYIMM_ROOT=/path/to/your/easy-imm
-./run.sh
-```
-
 ### Initial Configuration
 
-**Intersight API credentials** (required for Easy IMM tab):
+**Intersight API credentials** (required for Easy IMM tab and Visualiser live API mode):
 1. Click the **Settings** (gear) icon in the toolbar
 2. Enter your Intersight API Key ID
 3. Enter the path to your `SecretKey.txt` file
@@ -214,16 +249,20 @@ export EASYIMM_ROOT=/path/to/your/easy-imm
 3. Enter username and password
 4. Click Save Connection
 
-### Syncing from Intersight
+**Visualiser** (no configuration required):
+- Upload techsupport bundles directly, or
+- Connect to Intersight from within the Visualiser tab using API credentials
 
-Once your API credentials are configured:
+### Using the Visualiser Tab
 
-1. Click the **Sync** button (circular arrow icon) in the Easy IMM toolbar
-2. The sync runs in the background -- a progress indicator shows which resource type is being fetched
-3. When complete, the tree refreshes with all synced resources visible
-4. Synced resources are stored in `domains/<fqdn>/` and tagged in the tree as "synced"
-
-To **remove synced data**, click the **Unsync** button (crossed-out sync icon) and select the domain to remove.
+1. Switch to the **Visualiser** tab (third tab in the navigation bar)
+2. Choose your data source:
+   - **Upload**: Click the upload icon, drag-and-drop or browse for techsupport bundles
+   - **Connect**: Click the connect icon, enter Intersight API credentials
+3. Once data is loaded, explore the interactive tree hierarchy
+4. Switch views: Physical, Logical, Errors, Topology
+5. Run audits: Click "Best Practices" or "Security Hardening" buttons
+6. Export audit reports: Download as Word (.docx) or HTML
 
 ### Commands
 
@@ -238,49 +277,14 @@ EASYIMM_ROOT=/path/to/imm ./run.sh  # Point to a different Easy IMM workspace
 
 ### Changing the Port
 
-By default the toolkit runs on **port 8200**. If that port is already in use by another application, you can change it in two ways:
-
-**Option 1 -- One-time override (recommended)**
-
-Set the `PORT` environment variable before running:
+By default the toolkit runs on **port 8200**. To change it:
 
 ```bash
+# One-time override
 PORT=9000 ./run.sh
+
+# Permanent change: edit run.sh and change PORT="${PORT:-8200}" to your preferred port
 ```
-
-The app will start on http://localhost:9000 instead.
-
-**Option 2 -- Find an available port first**
-
-If you're not sure which ports are free, check what's in use:
-
-```bash
-# macOS / Linux
-lsof -i :8200          # Check if 8200 is taken
-lsof -i -P | grep LISTEN   # See all ports in use
-
-# Windows (PowerShell)
-netstat -ano | findstr :8200
-```
-
-Then pick any unused port (e.g., 3000, 5000, 9000, 8080) and start with:
-
-```bash
-PORT=<your-port> ./run.sh
-```
-
-**Option 3 -- Permanent change**
-
-To always use a different port, edit `run.sh` and change the default:
-
-```bash
-# Near the top of run.sh, change:
-PORT="${PORT:-8200}"
-# To your preferred port, e.g.:
-PORT="${PORT:-9000}"
-```
-
-> **Note:** In development mode (`./run.sh dev`), the Vite dev server runs on port 3100 and the backend on the configured port (default 8200). Only the backend port is configurable via `PORT`.
 
 ---
 
@@ -290,117 +294,139 @@ PORT="${PORT:-9000}"
 
 | Module | Purpose |
 |--------|---------|
-| `paths.py` | Centralised path config -- `EASYIMM_ROOT` from env var or auto-detected parent directory |
-| `app.py` | FastAPI application, REST + WebSocket endpoints, static file serving |
+| `app.py` | FastAPI application, REST + WebSocket endpoints, mounts Visualiser sub-app, static file serving |
+| `paths.py` | Centralised path config — `EASYIMM_ROOT` from env var or auto-detected parent directory |
 | `schema_engine.py` | Parses the Easy IMM JSON schema to generate dynamic form definitions |
-| `yaml_manager.py` | CRUD operations on `.ezi.yaml` files; merges per-domain synced data into hierarchical tree; detects legacy MOID orgs |
+| `yaml_manager.py` | CRUD operations on `.ezi.yaml` files; merges per-domain synced data into hierarchical tree |
 | `terraform_runner.py` | Async subprocess runner for Terraform commands with streaming output |
 | `redfish_manager.py` | 27 Redfish resource schemas, config storage, TF file generation |
 | `redfish_direct.py` | Direct Redfish API push + live state reader (PATCH/POST/GET to BMC) |
 | `intersight_client.py` | Intersight Python SDK wrapper with full-attribute extraction for sync |
-| `intersight_mapper.py` | Per-resource-type mappers (51 types) that convert Intersight API fields to Easy IMM YAML format |
-| `intersight_sync.py` | Background sync engine -- pulls from Intersight, resolves org MOIDs to names, maps and writes per-domain `.ezi.yaml` files |
+| `intersight_mapper.py` | Per-resource-type mappers (51 types) converting Intersight API fields to Easy IMM YAML format |
+| `intersight_sync.py` | Background sync engine — pulls from Intersight, resolves org MOIDs to names, writes per-domain `.ezi.yaml` |
+| `config_validator.py` | Pre-flight validation of Terraform configs (cross-policy references) |
 | `docascode_exporter.py` | Maps configs to CiscoIQ Document-as-Code YAML schema |
+| `visualiser/` | Intersight Visualiser sub-application (mounted at `/visualiser`) |
+| `visualiser/main.py` | FastAPI sub-app with upload, hierarchy, audit, and export endpoints |
+| `visualiser/techsupport_parser.py` | Parses UCS techsupport bundles (tar.gz, JSON, XML) into MO hierarchies |
+| `visualiser/best_practices.py` | 43 audit rules (22 best-practices + 21 security-hardening) with custom rule support |
+| `visualiser/data_collector.py` | Builds hierarchy from live Intersight API data |
+| `visualiser/intersight_client.py` | Async Intersight API client with HTTP Signature auth (v2 RSA, v3 ECDSA) |
+| `visualiser/frontend/` | Visualiser UI (vanilla JS + D3.js, served as static files) |
 
 ### Frontend (React + Vite + Material UI)
 
 | Component | Purpose |
 |-----------|---------|
-| `App.jsx` | Main shell with tab navigation, toolbar with Sync/Unsync/Import/Export/Settings buttons |
-| `TreeNavigator.jsx` | Hierarchical tree with policy bucketing (Compute, Networking, Storage & SAN, Management, Infrastructure); clean unabbreviated labels; local orgs at top, synced domains grouped by Intersight domain → organization with MOID→name resolution |
-| `ResourcePanel.jsx` | Dynamic form editor for any Easy IMM resource |
+| `App.jsx` | Main shell with 3-tab navigation, toolbar, Sync/Unsync/Import/Export/Settings |
+| `TreeNavigator.jsx` | Hierarchical tree with policy bucketing, org-click for site details, download icons |
+| `ResourcePanel.jsx` | Dynamic form editor with YAML/XML download per resource |
+| `SiteDetailPanel.jsx` | Organisation overview (resource counts, type breakdown, resource table, YAML/XML export) |
 | `RedfishPanel.jsx` | Redfish server configuration with master-detail layout |
-| `TerraformPanel.jsx` | Real-time Terraform command runner (Easy IMM) |
+| `TerraformPanel.jsx` | Real-time Terraform command runner |
 | `ImportDialog.jsx` | Multi-step import wizard for Intersight |
 | `ExportDialog.jsx` | CiscoIQ Document-as-Code YAML preview and download |
-| `SettingsDialog.jsx` | API key and connection settings |
-| `CloneDialog.jsx` | Clone resources across organizations |
+| `SettingsDialog.jsx` | API key settings with "Clear Connection" button |
+| `CloneDialog.jsx` | Clone resources across organisations |
 
-### API Endpoints
+### API Endpoints (Main App)
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| `GET` | `/api/tree` | Resource tree (local orgs + synced domains with MOID→name map) |
-| `GET` | `/api/orgs` | List organizations |
-| `POST` | `/api/orgs` | Create organization |
+| `GET` | `/api/tree` | Resource tree (local orgs + synced domains) |
+| `GET` | `/api/orgs` | List organisations |
+| `POST` | `/api/orgs` | Create organisation |
 | `GET/POST/DELETE` | `/api/resources/...` | CRUD for resources |
-| `POST` | `/api/import-local/preview` | Preview import from a local Easy IMM workspace |
-| `POST` | `/api/import-local/apply` | Import resources from a local Easy IMM workspace |
 | `POST` | `/api/sync` | Trigger background Intersight sync |
 | `GET` | `/api/sync/status` | Poll sync progress |
 | `GET` | `/api/sync/domains` | List synced domain folders |
-| `DELETE` | `/api/sync/domains/{name}` | Unsync (remove) a domain |
-| `POST` | `/api/import/test` | Test Intersight connection |
-| `GET` | `/api/import/orgs` | List Intersight orgs |
-| `POST` | `/api/import/resources` | Browse Intersight resources |
+| `DELETE` | `/api/sync/all` | Remove all synced data |
+| `DELETE` | `/api/settings` | Clear saved Intersight credentials |
 | `POST` | `/api/terraform/{action}` | Run Terraform (init/plan/apply/destroy) |
-| `GET` | `/api/redfish/live` | Read live BMC state for all resource types |
+| `GET` | `/api/redfish/live` | Read live BMC state |
 | `POST` | `/api/redfish/direct-push` | Direct push to Redfish BMC |
-| `POST` | `/api/redfish/generate` | Generate Redfish Terraform files |
+| `GET` | `/api/export/full-state` | Download full state as YAML |
+| `GET` | `/api/export/full-state-xml` | Download full state as XML |
 | `GET` | `/api/export/tech-shared` | Download CiscoIQ tech-shared YAML |
 | `GET` | `/api/export/tech-ucs` | Download CiscoIQ tech-ucs YAML |
 
+### API Endpoints (Visualiser Sub-App at `/visualiser`)
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `POST` | `/visualiser/api/connect` | Connect to Intersight API |
+| `POST` | `/visualiser/api/disconnect` | Disconnect and clear cache |
+| `GET` | `/visualiser/api/status` | Current connection status |
+| `GET` | `/visualiser/api/hierarchy` | Get parsed hierarchy tree (physical/logical/errors/topology) |
+| `POST` | `/visualiser/api/upload` | Upload techsupport bundles (SSE progress stream) |
+| `POST` | `/visualiser/api/upload/add` | Add more files to current session |
+| `GET` | `/visualiser/api/export` | Export hierarchy as JSON |
+| `GET` | `/visualiser/api/audit` | Run best practices / security audit |
+| `GET` | `/visualiser/api/audit/rules` | Get current audit rules |
+| `PUT` | `/visualiser/api/audit/rules` | Update rule settings (enable/disable/severity) |
+| `POST` | `/visualiser/api/audit/rules/add` | Add custom audit rule |
+| `POST` | `/visualiser/api/audit/rules/delete` | Delete custom rule |
+| `GET` | `/visualiser/api/audit/export` | Export audit report as Word (.docx) |
+| `GET` | `/visualiser/api/audit/export/html` | Export audit report as HTML |
+
 ### Key Technologies
 
-- **FastAPI** -- High-performance Python web framework with async support
-- **WebSockets** -- Real-time streaming of Terraform command output
-- **React 19** -- UI library with hooks-based architecture
-- **Material UI 9** -- Component library for consistent, accessible UI
-- **Vite 8** -- Fast frontend build tool
-- **Terraform** -- Infrastructure as Code engine (Intersight + Redfish providers)
-- **Intersight Python SDK** -- Official SDK for Cisco Intersight API
-- **51 Intersight resource mappers** -- Full coverage of all Easy IMM resource types for live sync
-- **27 Redfish resource types** -- Comprehensive BMC management with live state reading
+- **FastAPI** — High-performance Python web framework with async support and sub-app mounting
+- **WebSockets** — Real-time streaming of Terraform command output
+- **React 19** — UI library with hooks-based architecture
+- **Material UI 9** — Component library for consistent, accessible UI
+- **Vite 8** — Fast frontend build tool
+- **D3.js v7** — Interactive tree visualisation (Visualiser tab)
+- **Terraform** — Infrastructure as Code engine (Intersight + Redfish providers)
+- **Intersight Python SDK** — Official SDK for Cisco Intersight API
+- **defusedxml** — Secure XML parsing for techsupport bundles
+- **python-docx** — Word document generation for audit reports
 
 ### Project Structure
 
 ```
-EasyIMM-UCS-Toolkit/            # Self-contained app folder
-├── run.sh                      # One-command start script
-├── README.md                   # This file
+EasyIMM-UCS-Toolkit/                # Self-contained app folder
+├── run.sh                          # One-command start script
+├── README.md                       # This file
 ├── .gitignore
 ├── backend/
-│   ├── requirements.txt        # Python dependencies
-│   ├── paths.py                # Centralised path config (EASYIMM_ROOT)
-│   ├── app.py                  # FastAPI application
-│   ├── schema_engine.py        # Easy IMM schema parser
-│   ├── yaml_manager.py         # YAML file manager (local + domain merge)
-│   ├── terraform_runner.py     # Terraform subprocess runner
-│   ├── redfish_manager.py      # 27 Redfish resource schemas + TF generator
-│   ├── redfish_direct.py       # Direct Redfish push + live state reader
-│   ├── intersight_client.py    # Intersight SDK client (full attribute pull)
-│   ├── intersight_mapper.py    # 51 Intersight→YAML resource mappers
-│   ├── intersight_sync.py      # Background sync engine (per-domain)
-│   ├── docascode_exporter.py   # CiscoIQ export mapper
-│   └── static/                 # Built frontend (auto-generated)
+│   ├── requirements.txt            # Python dependencies (all-in-one)
+│   ├── paths.py                    # Centralised path config
+│   ├── app.py                      # FastAPI main app + Visualiser mount
+│   ├── schema_engine.py            # Easy IMM schema parser
+│   ├── yaml_manager.py             # YAML file manager
+│   ├── terraform_runner.py         # Terraform subprocess runner
+│   ├── config_validator.py         # Pre-flight config validation
+│   ├── redfish_manager.py          # Redfish schemas + TF generator
+│   ├── redfish_direct.py           # Direct Redfish push + live state
+│   ├── intersight_client.py        # Intersight SDK client
+│   ├── intersight_mapper.py        # 51 Intersight→YAML mappers
+│   ├── intersight_sync.py          # Background sync engine
+│   ├── docascode_exporter.py       # CiscoIQ export mapper
+│   ├── visualiser/                 # Intersight Visualiser sub-app
+│   │   ├── __init__.py
+│   │   ├── main.py                 # FastAPI sub-app (mounted at /visualiser)
+│   │   ├── techsupport_parser.py   # Techsupport bundle parser
+│   │   ├── best_practices.py       # 43 audit rules engine
+│   │   ├── data_collector.py       # Intersight API hierarchy builder
+│   │   ├── intersight_client.py    # Async Intersight client (HTTP Sig auth)
+│   │   └── frontend/              # Visualiser UI (vanilla JS + D3.js)
+│   │       ├── index.html
+│   │       ├── app.js
+│   │       ├── visualizer.js
+│   │       ├── best-practices.js
+│   │       └── styles.css
+│   └── static/                     # Built React frontend (auto-generated)
 ├── frontend/
-│   ├── package.json            # npm dependencies
-│   ├── vite.config.js          # Vite build configuration
+│   ├── package.json                # npm dependencies
+│   ├── vite.config.js              # Vite build configuration
 │   ├── src/
-│   │   ├── App.jsx             # Main application
-│   │   ├── api.js              # API client
-│   │   ├── theme.js            # MUI dark theme
-│   │   └── components/         # React components
-│   └── public/                 # Static assets
-└── redfish-workspace/          # Generated Redfish TF files (runtime)
-
-# The Easy IMM workspace (pointed to by EASYIMM_ROOT):
-your-easy-imm-repo/
-├── main.tf, variables.tf, ...  # Terraform files
-├── organizations/              # .ezi.yaml config files
-├── pools/
-├── policies/
-├── profiles/
-├── templates/
-├── yaml_schema/                # Easy IMM JSON schema
-├── domains/                    # Per-domain synced data (auto-created)
-│   └── intersight.com/
-│       ├── organizations/
-│       ├── pools/
-│       ├── policies/
-│       ├── profiles/
-│       └── templates/
-└── EasyIMM-UCS-Toolkit/        # ← app goes here (default layout)
+│   │   ├── App.jsx                 # Main app (3 tabs)
+│   │   ├── api.js                  # API client
+│   │   ├── theme.js                # MUI dark theme
+│   │   └── components/             # React components
+│   └── public/                     # Static assets
+└── redfish-workspace/              # Generated Redfish TF files (runtime)
 ```
 
 ---
@@ -408,55 +434,56 @@ your-easy-imm-repo/
 ## Features at a Glance
 
 ### Easy IMM Tab
-- Organization management (create, delete, clone)
-- Dynamic form editor for 50+ resource types (pools, policies, profiles, templates)
-- **Bucketed policy tree** -- 45+ policies are organised into logical groups (Compute, Networking, Storage & SAN, Management, Infrastructure) instead of a flat list, with per-bucket resource counts
-- **Clean labels** -- full, unabbreviated names matching Intersight terminology (e.g., "Ethernet Network Control" not "Eth Net Control"; pools explicitly labelled "IP Pool", "MAC Pool", etc.)
-- **Tooltips** on profile/template sub-types (Chassis, Domain, Server) explaining their purpose
+- Organisation management (create, delete, clone)
+- Dynamic form editor for 50+ resource types
+- Bucketed policy tree (Compute, Networking, Storage & SAN, Management, Infrastructure)
+- **Site Detail Panel** — click any org to see resource counts, type breakdown, and full resource table
+- **Per-resource download** — download individual resources as YAML or XML
+- **Per-organisation download** — download all org data as YAML or XML
+- **Full-state export** — download entire configuration as YAML or XML
 - Schema-validated fields with dropdowns, toggles, and cross-references
-- Resource cloning across organizations
-- **Intersight Live Sync** -- pull all deployed configs into per-domain folders with one click
-- **Editable synced orgs** -- synced organizations show all categories with Add buttons, so you can create new resources even for orgs with no existing Intersight configuration
-- **Unsync** -- remove synced domain data to clean up the tree
-- **Import from local workspace** -- point to any existing Easy IMM folder to import all its orgs and resources with preview before apply
-- Import from Intersight (browse mode)
+- Resource cloning across organisations
+- Intersight Live Sync with per-domain folder storage
+- Unsync all — remove all synced data and clear credentials
+- Import from local workspace or browse Intersight
 - Terraform Init / Validate / Plan / Apply / Destroy with live output
 
 ### Redfish Tab
-- BMC connection management (endpoint, credentials, TLS)
-- **27 configurable resource types** covering the full Redfish object model:
-  - **Compute**: BIOS (50+ C885A tokens), BIOS Reset, Boot Order, Power State, Identify LED
-  - **BMC Management**: BMC Settings, BMC Network Protocol, BMC Ethernet Interface, NTP Configuration
-  - **Access & Security**: User Accounts, Account Service (lockout policies), Session Service, Secure Boot, Certificate Management
-  - **Hardware**: Chassis Thermal (read-only sensors), Chassis Power (power capping), Storage Controllers (RAID), System Inventory (read-only)
-  - **Firmware**: Firmware Update (BMC/BIOS/GPU/NIC/CPLD via UpdateService)
-  - **Monitoring**: Remote Syslog, SNMP Configuration, SMTP Email Alerts, Event Subscriptions, Log Service
-  - **Console**: KVM Configuration, Virtual Media
-  - **Actions**: BMC Reset (graceful/force restart)
-- BIOS configuration grouped by category: I/O, Server Management, Security, Memory, Processor, Power/Performance
-- Enable/disable individual resources
-- **Live state sync** -- read the current BMC configuration with one click; green dots show which resources have live data; "Load Live Values" populates forms with actual server values
-- **Two deployment methods:**
-  - **Direct Push** -- PATCH/POST directly to BMC Redfish API (no Terraform needed, instant apply)
-  - **Terraform IaC** -- Generate `.tf` files, plan, and apply with state management
-- Independent Terraform runner for Redfish workspace
+- BMC connection management
+- 27 configurable resource types
+- BIOS configuration with 50+ tokens grouped by category
+- Live state sync from BMC
+- Two deployment methods: Direct Push and Terraform IaC
+- Independent Terraform runner
+
+### Visualiser Tab
+- Upload UCS techsupport bundles (supports .tar.gz, .tgz, .tar, .zip, .gz, .json.gz, .json, .xml)
+- Connect to live Intersight API
+- Hybrid mode (techsupport + API)
+- Interactive D3.js tree visualisation with 4 view modes
+- **Best Practices Audit** — 22 rules from Cisco Best Practices Guide
+- **Security Hardening Audit** — 21 rules from Cisco Hardening Guide
+- Custom rule creation with field/value pattern matching
+- Export audit reports as Word (.docx) or HTML
+- Search and filter the hierarchy
+- JSON export of full parsed data
+- SSE-based upload progress streaming
 
 ### Sync / Unsync
-- **Sync** pulls live Intersight configurations into `domains/<fqdn>/` folders
-- Each domain gets the full Easy IMM directory structure (organizations, pools, policies, profiles, templates)
+- Sync pulls live Intersight configurations into `domains/<fqdn>/` folders
 - 51 resource type mappers cover all pools, policies, profiles, and templates
-- **Hierarchical tree display**: Synced resources appear in a separate green "Synced from Intersight" section, grouped by domain name, then by organization name -- clearly separated from local configuration. Policies are bucketed into Compute, Networking, Storage & SAN, Management, and Infrastructure groups for easy navigation
-- **MOID → name resolution**: Organization MOIDs are automatically resolved to their human-readable names (e.g., `CBUCSX-CBUAL.GOV.AE (6791c3a6…)` instead of raw `6791c3a66972653001fd82ff`)
-- Local resources are never overwritten -- synced data lives in separate folders
-- **Add to synced orgs**: All four categories (Pools, Policies, Profiles, Templates) are always visible for synced organizations, with Add buttons enabled -- so you can create new resources for orgs that have no existing configuration on Intersight
-- **Unsync** removes a domain folder entirely, cleaning the tree instantly
-- Also handles **legacy synced data** -- MOID-named organizations from older syncs that were stored directly in the main YAML files can be detected and removed
-- Multiple domains can be synced simultaneously
+- Hierarchical tree display with domain → organisation grouping
+- MOID → name resolution
+- Unsync All removes all synced data with confirmation dialog
+- Clear Connection removes saved API credentials
 
 ### Export
 - CiscoIQ Document-as-Code export (`data.tech-shared.yaml`, `data.tech-ucs.yaml`)
-- YAML preview before download
-- Maps hardware inventory, cabling, pools, policies, profiles, and administration settings
+- Per-resource YAML/XML download
+- Per-organisation YAML/XML download
+- Full-state YAML/XML download
+- Visualiser audit reports (Word .docx, HTML)
+- Visualiser hierarchy JSON export
 
 ---
 
@@ -470,11 +497,11 @@ your-easy-imm-repo/
 | Intersight auth fails | Verify your API Key ID and SecretKey.txt path in Settings |
 | Frontend not loading | Run `./run.sh build` to rebuild the frontend |
 | Sync shows 0 resources | The connected domain may not have resources of those types deployed |
-| Synced resources not appearing | Click the Refresh button after sync completes. Synced resources appear under the green "Synced from Intersight" section at the bottom of the tree. |
-| Org names show as MOIDs | Ensure Intersight credentials are configured. The tree resolves MOIDs to names when a connection is active. |
-| Unsync shows "No synced domains" | No `domains/` folders or legacy MOID organizations were found. Check if data was already unsynced. |
-| Redfish live sync fails | Verify BMC endpoint, credentials, and that the server is reachable. The sync icon is disabled until a connection is saved. |
-| Redfish shows "BMC connection not configured" | Save the BMC connection first (endpoint + username + password) before clicking the sync icon |
+| Visualiser upload fails | Ensure the file is a supported format (.tar.gz, .json, .xml, etc.) and under 2GB |
+| Audit shows all "pass" | The techsupport bundle may not contain the MO types needed for specific checks |
+| Visualiser shows "Not connected" | Upload a techsupport file or connect via the Intersight API from within the Visualiser tab |
+| Org names show as MOIDs | Ensure Intersight credentials are configured; the tree resolves MOIDs to names |
+| "Use Profile Templates" false positive | Ensure you're using the latest version — the audit now checks `_resolved_template`, `srcTempl`, `operSrcTemplName`, `SrcTemplate`, and `ucs_server_profile_template` |
 
 ---
 

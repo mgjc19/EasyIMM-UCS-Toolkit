@@ -32,12 +32,13 @@ class TerraformRunner:
                             env[key] = val
         return env
 
-    async def run(self, command: str, callback=None) -> dict:
+    async def run(self, command: str, callback=None, targets: list[str] | None = None) -> dict:
         args_map = {
             "init": ["terraform", "init"],
             "validate": ["terraform", "validate"],
             "plan": ["terraform", "plan", "-out=main.plan", "-no-color"],
-            "apply": ["terraform", "apply", "-auto-approve", "main.plan", "-no-color"],
+            "apply": ["terraform", "apply", "-auto-approve", "-no-color"],
+            "apply_plan": ["terraform", "apply", "-auto-approve", "main.plan", "-no-color"],
             "destroy": ["terraform", "destroy", "-auto-approve", "-no-color"],
             "state_list": ["terraform", "state", "list"],
         }
@@ -45,6 +46,11 @@ class TerraformRunner:
         args = args_map.get(command)
         if not args:
             return {"success": False, "output": f"Unknown command: {command}"}
+
+        if targets:
+            for t in targets:
+                args.append(f"-target={t}")
+
 
         env = self._env()
         output_lines = []

@@ -17,6 +17,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import DescriptionIcon from '@mui/icons-material/Description';
 import CloudIcon from '@mui/icons-material/Cloud';
 import LanIcon from '@mui/icons-material/Lan';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
 
 const CATEGORY_ICONS = {
   pools: <StorageIcon fontSize="small" />,
@@ -27,7 +28,7 @@ const CATEGORY_ICONS = {
 
 const CATEGORY_ORDER = ['pools', 'policies', 'profiles', 'templates'];
 
-function TreeItem({ label, icon, depth = 0, children, count, onAdd, onClick, onDelete, onClone, expandedByDefault = false }) {
+function TreeItem({ label, icon, depth = 0, children, count, onAdd, onClick, onDelete, onClone, onDownload, expandedByDefault = false }) {
   const [open, setOpen] = useState(expandedByDefault);
   const hasChildren = Boolean(children);
   const pl = depth * 2;
@@ -42,8 +43,12 @@ function TreeItem({ label, icon, depth = 0, children, count, onAdd, onClick, onD
           borderRadius: 1,
         }}
         onClick={() => {
-          if (onClick) onClick();
-          else if (hasChildren) setOpen(!open);
+          if (onClick) {
+            onClick();
+            if (hasChildren && !open) setOpen(true);
+          } else if (hasChildren) {
+            setOpen(!open);
+          }
         }}
       >
         {hasChildren ? (
@@ -58,6 +63,13 @@ function TreeItem({ label, icon, depth = 0, children, count, onAdd, onClick, onD
           {label}
           {count !== undefined && <Typography component="span" variant="caption" sx={{ ml: 0.5, color: 'text.secondary' }}>({count})</Typography>}
         </Typography>
+        {onDownload && (
+          <Tooltip title="Download">
+            <IconButton size="small" onClick={(e) => { e.stopPropagation(); onDownload(e); }} sx={{ opacity: 0.5, '&:hover': { opacity: 1, color: 'primary.main' } }}>
+              <FileDownloadIcon sx={{ fontSize: 14 }} />
+            </IconButton>
+          </Tooltip>
+        )}
         {onClone && (
           <Tooltip title="Clone">
             <IconButton size="small" onClick={(e) => { e.stopPropagation(); onClone(); }} sx={{ opacity: 0.5, '&:hover': { opacity: 1 } }}>
@@ -160,12 +172,14 @@ function ResourceTypeItem({ type, resources, org, cat, depth, onSelect, onAdd, o
   );
 }
 
-function OrgTree({ org, orgData, types, onSelect, onAdd, onDelete, onClone, depth = 0, expandedByDefault, icon, synced, displayLabel }) {
+function OrgTree({ org, orgData, types, onSelect, onAdd, onDelete, onClone, onDownload, onOrgSelect, depth = 0, expandedByDefault, icon, synced, displayLabel }) {
   return (
     <TreeItem
       label={displayLabel || org} icon={icon || <FolderIcon fontSize="small" />} depth={depth}
       expandedByDefault={expandedByDefault}
       onDelete={synced ? undefined : () => onDelete(org, null, null, null)}
+      onDownload={onDownload ? (e) => onDownload(org, orgData, e) : undefined}
+      onClick={onOrgSelect ? () => onOrgSelect(org, orgData) : undefined}
     >
       {CATEGORY_ORDER.map((cat) => {
         const catTypes = types[cat] || [];
@@ -227,10 +241,10 @@ function resolveMoidLabel(org, moidNames) {
   return org;
 }
 
-export default function TreeNavigator({ tree, types, onSelect, onAdd, onDelete, onClone, onAddOrg }) {
+export default function TreeNavigator({ tree, types, onSelect, onAdd, onDelete, onClone, onAddOrg, onDownload, onOrgSelect }) {
   if (!tree || !types) return null;
 
-  const syncedDomains = tree._synced_domains || {};
+  const syncedDomains = tree._intersight_data || {};
   const moidNames = tree._moid_names || {};
   const localOrgs = Object.keys(tree).filter((k) => !k.startsWith('_'));
   const hasSynced = Object.keys(syncedDomains).length > 0;
@@ -253,6 +267,7 @@ export default function TreeNavigator({ tree, types, onSelect, onAdd, onDelete, 
         <OrgTree
           key={org} org={org} orgData={tree[org]} types={types}
           onSelect={onSelect} onAdd={onAdd} onDelete={onDelete} onClone={onClone}
+          onDownload={onDownload} onOrgSelect={onOrgSelect}
           expandedByDefault={localOrgs.length <= 3}
         />
       ))}
@@ -262,7 +277,7 @@ export default function TreeNavigator({ tree, types, onSelect, onAdd, onDelete, 
           <Box sx={{ display: 'flex', alignItems: 'center', px: 1, mb: 0.5 }}>
             <CloudIcon sx={{ mr: 1, color: 'success.main', fontSize: 18 }} />
             <Typography variant="subtitle2" sx={{ flex: 1, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'success.main' }}>
-              Synced from Intersight
+              Intersight Data
             </Typography>
           </Box>
           {Object.entries(syncedDomains).map(([domain, domainOrgs]) => (
@@ -277,6 +292,7 @@ export default function TreeNavigator({ tree, types, onSelect, onAdd, onDelete, 
                 <OrgTree
                   key={org} org={org} orgData={orgData} types={types}
                   onSelect={onSelect} onAdd={onAdd} onDelete={onDelete} onClone={onClone}
+                  onDownload={onDownload} onOrgSelect={onOrgSelect}
                   depth={1} expandedByDefault
                   displayLabel={resolveMoidLabel(org, moidNames)}
                   icon={<FolderIcon fontSize="small" sx={{ color: 'success.main' }} />}

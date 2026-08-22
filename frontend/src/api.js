@@ -36,9 +36,11 @@ export const api = {
   getSettings: () => request('/api/settings'),
   saveSettings: (settings) =>
     request('/api/settings', { method: 'PUT', body: JSON.stringify(settings) }),
+  clearSettings: () => request('/api/settings', { method: 'DELETE' }),
   testConnection: () => request('/api/settings/test', { method: 'POST' }),
 
   runTerraform: (action) => request(`/api/terraform/${action}`, { method: 'POST' }),
+  validateConfig: () => request('/api/terraform/validate-config', { method: 'POST' }),
 
   importTestConnection: () => request('/api/import/test', { method: 'POST' }),
   importListOrgs: () => request('/api/import/orgs'),
@@ -59,12 +61,15 @@ export const api = {
   listSyncedDomains: () => request('/api/sync/domains'),
   unsyncDomain: (domainName) =>
     request(`/api/sync/domains/${encodeURIComponent(domainName)}`, { method: 'DELETE' }),
+  unsyncAll: () => request('/api/sync/all', { method: 'DELETE' }),
 
   importLocalPreview: (path) =>
     request('/api/import-local/preview', { method: 'POST', body: JSON.stringify({ path }) }),
   importLocalApply: (path) =>
     request('/api/import-local/apply', { method: 'POST', body: JSON.stringify({ path }) }),
 
+  downloadFullState: () => window.open('/api/export/full-state', '_blank'),
+  downloadFullStateXml: () => window.open('/api/export/full-state-xml', '_blank'),
   previewTechShared: () => request('/api/export/preview/tech-shared'),
   previewTechUcs: () => request('/api/export/preview/tech-ucs'),
   downloadTechShared: () => window.open('/api/export/tech-shared', '_blank'),

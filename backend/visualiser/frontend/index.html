@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Intersight Visualiser</title>
+  <link rel="stylesheet" href="styles.css?v=21" />
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+
+  <!-- ===== Header ===== -->
+  <header id="toolbar">
+    <div class="toolbar-left">
+      <svg class="logo" viewBox="0 0 24 24" width="28" height="28">
+        <rect x="2" y="3" width="20" height="5" rx="1" fill="#00bceb"/>
+        <rect x="2" y="10" width="20" height="5" rx="1" fill="#06b6d4"/>
+        <rect x="2" y="17" width="20" height="5" rx="1" fill="#0284c7"/>
+      </svg>
+      <h1>Intersight Visualiser</h1>
+      <span id="account-badge" class="badge hidden"></span>
+      <select id="view-selector" class="view-dropdown hidden">
+        <option value="logical">Logical View</option>
+        <option value="physical">Physical View</option>
+        <option value="topology">Topology View</option>
+        <option value="errors">Errors &amp; Faults</option>
+        <option value="bestpractices">Best Practices</option>
+        <option value="securityhardening">Security Hardening</option>
+      </select>
+    </div>
+    <div class="toolbar-right">
+      <div class="search-box" id="search-container">
+        <svg viewBox="0 0 20 20" width="16" height="16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="12" y1="12" x2="17" y2="17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <input type="text" id="search-input" placeholder="Search policies, profiles…" autocomplete="off" />
+      </div>
+      <button id="btn-refresh" class="toolbar-btn" title="Refresh data" disabled>
+        <svg viewBox="0 0 20 20" width="16" height="16"><path d="M14.66 15.66A8 8 0 1 1 17 10h-2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><polyline points="17 6 17 10 13 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Refresh
+      </button>
+      <button id="btn-expand-all" class="toolbar-btn" title="Expand all nodes" disabled>Expand All</button>
+      <button id="btn-collapse-all" class="toolbar-btn" title="Collapse all nodes" disabled>Collapse All</button>
+      <button id="btn-export" class="toolbar-btn" title="Download view as HTML or JSON" disabled>
+        <svg viewBox="0 0 20 20" width="16" height="16"><path d="M3 14v3h14v-3M10 3v10M6 9l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Download
+      </button>
+      <button id="btn-add-files" class="toolbar-btn hidden" title="Add more techsupport files">+ Add Files</button>
+      <button id="btn-add-api" class="toolbar-btn hidden" title="Connect Intersight API for policy details">+ API</button>
+      <button id="btn-connect" class="toolbar-btn primary">Connect</button>
+    </div>
+  </header>
+
+  <!-- ===== Legend ===== -->
+  <div id="legend" class="hidden">
+    <span class="legend-title">Legend</span>
+    <div class="legend-items" id="legend-items"></div>
+  </div>
+
+  <!-- ===== Main visualizer area ===== -->
+  <main id="visualizer">
+    <div id="empty-state">
+      <div class="empty-icon">
+        <svg viewBox="0 0 80 80" width="80" height="80">
+          <rect x="10" y="8" width="60" height="14" rx="3" fill="#1e293b" stroke="#334155" stroke-width="1.5"/>
+          <rect x="10" y="28" width="60" height="14" rx="3" fill="#1e293b" stroke="#334155" stroke-width="1.5"/>
+          <rect x="10" y="48" width="60" height="14" rx="3" fill="#1e293b" stroke="#334155" stroke-width="1.5"/>
+          <line x1="40" y1="22" x2="40" y2="28" stroke="#475569" stroke-width="1.5"/>
+          <line x1="40" y1="42" x2="40" y2="48" stroke="#475569" stroke-width="1.5"/>
+        </svg>
+      </div>
+      <h2>Visualize Your UCS Infrastructure</h2>
+      <p>Connect to Intersight with your API key, or upload a UCS techsupport bundle for offline analysis.</p>
+      <div class="empty-actions">
+        <button class="btn-primary" onclick="document.getElementById('connect-modal').classList.remove('hidden')">
+          Connect to Intersight
+        </button>
+        <span class="empty-or">or</span>
+        <button class="btn-secondary" onclick="window._openUploadFresh && window._openUploadFresh()">
+          Upload Techsupport
+        </button>
+      </div>
+    </div>
+    <div id="tree-container"></div>
+    <div id="bp-container" class="bp-container hidden"></div>
+  </main>
+
+  <!-- ===== Detail panel ===== -->
+  <aside id="detail-panel" class="hidden">
+    <div class="detail-header">
+      <h3 id="detail-title">Policy Details</h3>
+      <button id="detail-close" class="close-btn">&times;</button>
+    </div>
+    <div id="detail-content">
+      <div class="detail-loading">Loading…</div>
+    </div>
+  </aside>
+
+  <!-- ===== Connect modal ===== -->
+  <div id="connect-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Connect to Intersight</h2>
+        <button class="close-btn" onclick="this.closest('.modal-overlay').classList.add('hidden')">&times;</button>
+      </div>
+      <form id="connect-form" autocomplete="off">
+        <label>
+          <span>API Key ID</span>
+          <input type="text" id="input-api-key" required placeholder="e.g. 5a…/6a…/…" />
+        </label>
+        <label>
+          <span>Secret Key File Path</span>
+          <input type="text" id="input-secret-path" required placeholder="/path/to/SecretKey.txt" />
+        </label>
+        <label>
+          <span>Intersight URL</span>
+          <input type="text" id="input-base-url" value="https://intersight.com" placeholder="https://intersight.com" />
+        </label>
+        <div id="connect-error" class="form-error hidden"></div>
+        <div class="modal-actions">
+          <button type="submit" class="btn-primary" id="btn-do-connect">Connect</button>
+          <button type="button" class="btn-secondary" onclick="document.getElementById('connect-modal').classList.add('hidden'); window._openUploadFresh && window._openUploadFresh()">Upload Techsupport Instead</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===== Upload modal ===== -->
+  <div id="upload-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Upload Techsupport Bundle</h2>
+        <button class="close-btn" onclick="this.closest('.modal-overlay').classList.add('hidden')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="upload-hint">For IMM domains, upload FI + Chassis + Server techsupport files together for a complete view.<br>You can also upload XML policy exports for detailed policy association.</p>
+        <div id="drop-zone" class="drop-zone">
+          <svg viewBox="0 0 48 48" width="48" height="48">
+            <rect x="8" y="14" width="32" height="24" rx="3" fill="none" stroke="#475569" stroke-width="2"/>
+            <path d="M24 10v20M18 16l6-6 6 6" fill="none" stroke="#00bceb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <p>Drag &amp; drop one or more techsupport files here</p>
+          <span class="drop-hint">.tar.gz, .tgz, .tar, .zip, .json.gz, .json, or .xml — up to 2 GB each</span>
+          <button type="button" class="btn-secondary" id="btn-browse">Browse Files</button>
+          <input type="file" id="file-input" accept=".tar.gz,.tgz,.tar,.zip,.gz,.json.gz,.json,.xml" multiple hidden />
+        </div>
+        <div id="file-list" class="file-list hidden"></div>
+        <div id="upload-progress" class="hidden">
+          <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+          <p id="upload-status">Uploading…</p>
+        </div>
+        <div id="upload-error" class="form-error hidden"></div>
+        <div class="modal-actions upload-actions">
+          <button type="button" class="btn-primary hidden" id="btn-upload-go">Upload &amp; Parse</button>
+          <button type="button" class="btn-secondary" onclick="document.getElementById('upload-modal').classList.add('hidden'); document.getElementById('connect-modal').classList.remove('hidden')">Use Intersight API Instead</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== VLAN list floating window ===== -->
+  <div id="vlan-modal" class="vlan-modal hidden">
+    <div class="vlan-modal-header">
+      <span id="vlan-modal-title">Allowed VLANs</span>
+      <button id="vlan-modal-close" class="vlan-modal-close">&times;</button>
+    </div>
+    <div id="vlan-modal-body" class="vlan-modal-body"></div>
+  </div>
+
+  <!-- ===== Loading overlay ===== -->
+  <div id="loading-overlay" class="modal-overlay hidden">
+    <div class="loading-card">
+      <div class="spinner"></div>
+      <p id="loading-message">Connecting to Intersight…</p>
+    </div>
+  </div>
+
+  <!-- ===== Status bar ===== -->
+  <footer id="status-bar">
+    <span id="status-text">Disconnected</span>
+    <span id="node-count"></span>
+  </footer>
+
+  <script src="visualizer.js?v=21"></script>
+  <script src="app.js?v=21"></script>
+  <script src="best-practices.js?v=21"></script>
+</body>
+</html>

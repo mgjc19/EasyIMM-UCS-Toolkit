@@ -10,6 +10,7 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import DownloadForOfflineIcon from '@mui/icons-material/DownloadForOffline';
 import SyncIcon from '@mui/icons-material/Sync';
 import SyncDisabledIcon from '@mui/icons-material/SyncDisabled';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
@@ -19,7 +20,6 @@ import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
-import FolderIcon from '@mui/icons-material/Folder';
 import Tooltip from '@mui/material/Tooltip';
 import Snackbar from '@mui/material/Snackbar';
 import Alert from '@mui/material/Alert';
@@ -33,6 +33,10 @@ import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
 import DeviceHubIcon from '@mui/icons-material/DeviceHub';
 import MemoryIcon from '@mui/icons-material/Memory';
+import BubbleChartIcon from '@mui/icons-material/BubbleChart';
+import CodeIcon from '@mui/icons-material/Code';
+import DataObjectIcon from '@mui/icons-material/DataObject';
+import { dump as yamlDump } from 'js-yaml';
 import theme from './theme';
 import { api } from './api';
 import TreeNavigator from './components/TreeNavigator';
@@ -43,6 +47,7 @@ import CloneDialog from './components/CloneDialog';
 import ImportDialog from './components/ImportDialog';
 import RedfishPanel from './components/RedfishPanel';
 import ExportDialog from './components/ExportDialog';
+import SiteDetailPanel from './components/SiteDetailPanel';
 
 export default function App() {
   const [mainTab, setMainTab] = useState(0);
@@ -55,6 +60,7 @@ export default function App() {
   const [localImportPath, setLocalImportPath] = useState('');
   const [localImportPreview, setLocalImportPreview] = useState(null);
   const [localImporting, setLocalImporting] = useState(false);
+  const [fullStateConfirmOpen, setFullStateConfirmOpen] = useState(false);
   const [toast, setToast] = useState(null);
 
   const [panelSchema, setPanelSchema] = useState(null);
@@ -63,6 +69,9 @@ export default function App() {
   const [panelType, setPanelType] = useState('');
   const [panelData, setPanelData] = useState(null);
 
+  const [selectedSiteOrg, setSelectedSiteOrg] = useState(null);
+  const [selectedSiteOrgData, setSelectedSiteOrgData] = useState(null);
+
   const [addOrgOpen, setAddOrgOpen] = useState(false);
   const [newOrgName, setNewOrgName] = useState('');
 
@@ -70,6 +79,9 @@ export default function App() {
   const [cloneInfo, setCloneInfo] = useState({});
 
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+
+  const [orgDownloadAnchor, setOrgDownloadAnchor] = useState(null);
+  const [orgDownloadTarget, setOrgDownloadTarget] = useState(null);
 
   const loadTree = useCallback(async () => {
     try {
@@ -123,27 +135,23 @@ export default function App() {
     };
   }, []);
 
-  const [unsyncAnchor, setUnsyncAnchor] = useState(null);
-  const [syncedDomains, setSyncedDomains] = useState([]);
+  const [unsyncConfirmOpen, setUnsyncConfirmOpen] = useState(false);
+  const [unsyncLoading, setUnsyncLoading] = useState(false);
 
-  const handleUnsyncOpen = async (event) => {
+  const handleUnsyncAll = async () => {
+    setUnsyncConfirmOpen(false);
+    setUnsyncLoading(true);
     try {
-      const domains = await api.listSyncedDomains();
-      setSyncedDomains(domains);
-      setUnsyncAnchor(event.currentTarget);
+      await api.unsyncAll();
+      setToast({ severity: 'success', text: 'All synced domain data removed' });
+      closePanel();
+      setSelectedSiteOrg(null);
+      setSelectedSiteOrgData(null);
+      await loadTree();
     } catch (e) {
       setToast({ severity: 'error', text: e.message });
-    }
-  };
-
-  const handleUnsync = async (domainName) => {
-    setUnsyncAnchor(null);
-    try {
-      await api.unsyncDomain(domainName);
-      setToast({ severity: 'success', text: `Unsynced domain: ${domainName}` });
-      loadTree();
-    } catch (e) {
-      setToast({ severity: 'error', text: e.message });
+    } finally {
+      setUnsyncLoading(false);
     }
   };
 
@@ -181,6 +189,8 @@ export default function App() {
       setPanelCategory(category);
       setPanelType(type);
       setPanelData(data);
+      setSelectedSiteOrg(null);
+      setSelectedSiteOrgData(null);
     } catch {
       setToast({ severity: 'warning', text: `Schema not available for ${type}` });
     }
@@ -189,10 +199,19 @@ export default function App() {
   const closePanel = () => {
     setPanelSchema(null);
     setPanelData(null);
+    setSelectedSiteOrg(null);
+    setSelectedSiteOrgData(null);
   };
 
   const handleSelect = (org, category, type, data) => openResource(org, category, type, data);
   const handleAdd = (org, category, type) => openResource(org, category, type, null);
+
+  const handleOrgSelect = (org, orgData) => {
+    setPanelSchema(null);
+    setPanelData(null);
+    setSelectedSiteOrg(org);
+    setSelectedSiteOrgData(orgData);
+  };
 
   const handleSave = async (data) => {
     try {
@@ -256,8 +275,88 @@ export default function App() {
     }
   };
 
+  const handleOrgDownload = (org, orgData, event) => {
+    setOrgDownloadTarget(org);
+    setOrgDownloadAnchor(event.currentTarget);
+    setSelectedSiteOrgData(orgData);
+  };
+
+  const getOrgExportData = (org, rawOrgData) => {
+    const raw = rawOrgData || tree?.[org];
+    if (!raw) return {};
+
+    const cleaned = {};
+    for (const cat of ['pools', 'policies', 'profiles', 'templates']) {
+      const catData = raw[cat];
+      if (!catData || typeof catData !== 'object') continue;
+      cleaned[cat] = {};
+      for (const [type, items] of Object.entries(catData)) {
+        if (!Array.isArray(items) || items.length === 0) continue;
+        cleaned[cat][type] = items.map((item) =>
+          item && typeof item === 'object' && item.data ? item.data : item
+        );
+      }
+    }
+    return { [org]: cleaned };
+  };
+
+  const objectToXml = (obj, rootTag = 'easyimm') => {
+    const escape = (s) =>
+      String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+    const convert = (key, value, depth) => {
+      const p = '  '.repeat(depth);
+      const tag = key.replace(/[^a-zA-Z0-9_.\-]/g, '_');
+      if (value === null || value === undefined) return '';
+      if (Array.isArray(value)) {
+        return value.map((item) => {
+          if (typeof item === 'object' && item !== null) {
+            const inner = Object.entries(item).map(([k, v]) => convert(k, v, depth + 1)).join('');
+            return `${p}<${tag}>\n${inner}${p}</${tag}>\n`;
+          }
+          return `${p}<${tag}>${escape(item)}</${tag}>\n`;
+        }).join('');
+      }
+      if (typeof value === 'object') {
+        const inner = Object.entries(value).map(([k, v]) => convert(k, v, depth + 1)).join('');
+        return `${p}<${tag}>\n${inner}${p}</${tag}>\n`;
+      }
+      return `${p}<${tag}>${escape(value)}</${tag}>\n`;
+    };
+
+    let xml = `<?xml version="1.0" encoding="UTF-8"?>\n<${rootTag}>\n`;
+    Object.entries(obj).forEach(([k, v]) => { xml += convert(k, v, 1); });
+    xml += `</${rootTag}>\n`;
+    return xml;
+  };
+
+  const triggerFileDownload = (content, filename, mimeType) => {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleOrgDownloadYaml = () => {
+    const data = getOrgExportData(orgDownloadTarget, selectedSiteOrgData);
+    const yamlStr = yamlDump(data, { lineWidth: 120, noRefs: true, sortKeys: false });
+    triggerFileDownload(yamlStr, `${orgDownloadTarget}.ezi.yaml`, 'application/x-yaml');
+    setOrgDownloadAnchor(null);
+  };
+
+  const handleOrgDownloadXml = () => {
+    const data = getOrgExportData(orgDownloadTarget, selectedSiteOrgData);
+    const xmlStr = objectToXml(data, 'easyimm');
+    triggerFileDownload(xmlStr, `${orgDownloadTarget}.xml`, 'application/xml');
+    setOrgDownloadAnchor(null);
+  };
+
   const orgs = tree ? Object.keys(tree) : [];
   const showPanel = !!panelSchema;
+  const showSiteDetail = !!selectedSiteOrg;
 
   return (
     <ThemeProvider theme={theme}>
@@ -283,6 +382,7 @@ export default function App() {
             >
               <Tab icon={<DeviceHubIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Easy IMM" />
               <Tab icon={<MemoryIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Redfish" />
+              <Tab icon={<BubbleChartIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Visualiser" />
             </Tabs>
 
             {mainTab === 0 && (
@@ -314,31 +414,13 @@ export default function App() {
                     sx={{ fontSize: 11, height: 22, mr: 0.5 }}
                   />
                 )}
-                <Tooltip title="Unsync — remove synced domain data">
-                  <IconButton onClick={handleUnsyncOpen} color="inherit">
-                    <SyncDisabledIcon />
-                  </IconButton>
+                <Tooltip title="Unsync — remove all synced domain data">
+                  <span>
+                    <IconButton onClick={() => setUnsyncConfirmOpen(true)} color="inherit" disabled={unsyncLoading}>
+                      {unsyncLoading ? <CircularProgress size={20} color="inherit" /> : <SyncDisabledIcon />}
+                    </IconButton>
+                  </span>
                 </Tooltip>
-                <Menu
-                  anchorEl={unsyncAnchor}
-                  open={Boolean(unsyncAnchor)}
-                  onClose={() => setUnsyncAnchor(null)}
-                >
-                  {syncedDomains.length === 0 ? (
-                    <MenuItem disabled>
-                      <ListItemText primary="No synced domains" />
-                    </MenuItem>
-                  ) : syncedDomains.map((d) => (
-                    <MenuItem key={d.name} onClick={() => handleUnsync(d.name)}>
-                      <ListItemIcon><FolderIcon fontSize="small" /></ListItemIcon>
-                      <ListItemText
-                        primary={d.name}
-                        secondary={`${d.resource_files} file${d.resource_files !== 1 ? 's' : ''}`}
-                      />
-                      <SyncDisabledIcon fontSize="small" sx={{ ml: 2, color: 'error.main' }} />
-                    </MenuItem>
-                  ))}
-                </Menu>
                 <Tooltip title="Import from Intersight (browse)">
                   <IconButton onClick={() => setImportOpen(true)} color="inherit">
                     <CloudDownloadIcon />
@@ -347,6 +429,11 @@ export default function App() {
                 <Tooltip title="Import from local Easy IMM workspace">
                   <IconButton onClick={() => setLocalImportOpen(true)} color="inherit">
                     <FolderOpenIcon />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Export full state (YAML / XML)">
+                  <IconButton onClick={() => setFullStateConfirmOpen(true)} color="inherit">
+                    <DownloadForOfflineIcon />
                   </IconButton>
                 </Tooltip>
                 <Tooltip title="Refresh">
@@ -374,6 +461,8 @@ export default function App() {
                   onSelect={handleSelect} onAdd={handleAdd}
                   onDelete={handleDelete} onClone={handleCloneOpen}
                   onAddOrg={() => setAddOrgOpen(true)}
+                  onDownload={handleOrgDownload}
+                  onOrgSelect={handleOrgSelect}
                 />
               </Box>
 
@@ -388,6 +477,22 @@ export default function App() {
                     category={panelCategory}
                     resourceType={panelType}
                     tree={tree}
+                  />
+                ) : showSiteDetail ? (
+                  <SiteDetailPanel
+                    org={selectedSiteOrg}
+                    orgData={selectedSiteOrgData}
+                    onClose={closePanel}
+                    onDownloadYaml={() => {
+                      const data = getOrgExportData(selectedSiteOrg, selectedSiteOrgData);
+                      const yamlStr = yamlDump(data, { lineWidth: 120, noRefs: true, sortKeys: false });
+                      triggerFileDownload(yamlStr, `${selectedSiteOrg}.ezi.yaml`, 'application/x-yaml');
+                    }}
+                    onDownloadXml={() => {
+                      const data = getOrgExportData(selectedSiteOrg, selectedSiteOrgData);
+                      const xmlStr = objectToXml(data, 'easyimm');
+                      triggerFileDownload(xmlStr, `${selectedSiteOrg}.xml`, 'application/xml');
+                    }}
                   />
                 ) : (
                   <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'text.secondary' }}>
@@ -409,6 +514,16 @@ export default function App() {
         {mainTab === 1 && (
           <Box sx={{ flex: 1, overflow: 'hidden' }}>
             <RedfishPanel />
+          </Box>
+        )}
+
+        {mainTab === 2 && (
+          <Box sx={{ flex: 1, overflow: 'hidden' }}>
+            <iframe
+              src="/visualiser/"
+              title="Intersight Visualiser"
+              style={{ width: '100%', height: '100%', border: 'none' }}
+            />
           </Box>
         )}
       </Box>
@@ -461,6 +576,66 @@ export default function App() {
           <Button variant="contained" color="error" onClick={confirmDelete}>Delete</Button>
         </DialogActions>
       </Dialog>
+
+      {/* Full-state export confirmation */}
+      <Dialog open={fullStateConfirmOpen} onClose={() => setFullStateConfirmOpen(false)}>
+        <DialogTitle>Export Full State</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Download the entire workspace configuration as a single file. Choose a format:
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setFullStateConfirmOpen(false)}>Cancel</Button>
+          <Button
+            variant="outlined"
+            onClick={() => { setFullStateConfirmOpen(false); api.downloadFullStateXml(); }}
+          >
+            Download XML
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => { setFullStateConfirmOpen(false); api.downloadFullState(); }}
+          >
+            Download YAML
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Unsync confirmation dialog */}
+      <Dialog open={unsyncConfirmOpen} onClose={() => setUnsyncConfirmOpen(false)}>
+        <DialogTitle>Remove Synced Data</DialogTitle>
+        <DialogContent>
+          <Typography>
+            This will remove all Intersight synced domain data from your workspace.
+            Local configurations will not be affected.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setUnsyncConfirmOpen(false)}>Cancel</Button>
+          <Button variant="contained" color="error" onClick={handleUnsyncAll}>
+            Remove All Synced Data
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Org-level download format menu */}
+      <Menu
+        anchorEl={orgDownloadAnchor}
+        open={Boolean(orgDownloadAnchor)}
+        onClose={() => setOrgDownloadAnchor(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <MenuItem onClick={handleOrgDownloadYaml}>
+          <ListItemIcon><DataObjectIcon fontSize="small" /></ListItemIcon>
+          <ListItemText>Download as YAML</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={handleOrgDownloadXml}>
+          <ListItemIcon><CodeIcon fontSize="small" /></ListItemIcon>
+          <ListItemText>Download as XML</ListItemText>
+        </MenuItem>
+      </Menu>
 
       {/* Import local workspace dialog */}
       <Dialog
